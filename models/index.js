@@ -16,6 +16,7 @@ const Favorite = require('./Favorite');
 const OrderCancellation = require('./OrderCancellation');
 const CategorySpecification = require('./CategorySpecification');
 const CategoryVariant = require('./CategoryVariant');
+const PushSubscription = require('./PushSubscription');
 
 // Определение связей
 
@@ -93,6 +94,10 @@ CategorySpecification.belongsTo(Category, { foreignKey: 'category_id', as: 'cate
 Category.hasMany(CategoryVariant, { foreignKey: 'category_id', as: 'variants' });
 CategoryVariant.belongsTo(Category, { foreignKey: 'category_id', as: 'category' });
 
+// Связи для push-подписок
+User.hasMany(PushSubscription, { foreignKey: 'user_id', as: 'pushSubscriptions' });
+PushSubscription.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
 module.exports = {
   Category,
   Product,
@@ -112,5 +117,6 @@ module.exports = {
   OrderCancellation,
   CategorySpecification,
   CategoryVariant,
+  PushSubscription,
 };
 

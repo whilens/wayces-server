@@ -64,6 +64,9 @@ app.use('/api/admin/categories', adminCategoriesRoutes);
 const adminReviewsRoutes = require('./routes/admin/reviews');
 app.use('/api/admin/reviews', adminReviewsRoutes);
 
+const pushSubscriptionsRoutes = require('./routes/pushSubscriptions');
+app.use('/api/push-subscriptions', pushSubscriptionsRoutes);
+
 // Централизованная обработка ошибок (должна быть последней)
 const errorHandler = require('./middleware/errorHandler');
 app.use(errorHandler);

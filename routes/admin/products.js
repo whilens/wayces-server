@@ -25,6 +25,7 @@ const {
 } = require('../../models');
 const path = require('path');
 const fs = require('fs');
+const { notifyNewProduct, notifyPriceDrop } = require('../../utils/pushNotifications');
 
 // Генерация slug из названия
 const generateSlug = (name) => {
@@ -381,6 +382,14 @@ router.post('/', authenticateAdmin, upload.any(), async (req, res) => {
 
     await transaction.commit();
 
+    // Отправляем push-уведомление о новом товаре
+    try {
+      await notifyNewProduct(product);
+    } catch (pushError) {
+      console.error('Ошибка отправки push-уведомления о новом товаре:', pushError);
+      // Не прерываем выполнение, если push не отправился
+    }
+
     // Получаем созданный товар с полными данными
     const createdProduct = await Product.findByPk(product.id, {
       include: [
@@ -445,6 +454,9 @@ router.put('/:id', authenticateAdmin, upload.any(), async (req, res) => {
       await transaction.rollback();
       return res.status(404).json({ error: 'Товар не найден' });
     }
+
+    // Сохраняем старую цену для проверки снижения
+    const oldPrice = parseFloat(product.basePrice);
 
     // Обновляем основные поля
     if (name) product.name = name;
@@ -858,6 +870,17 @@ router.put('/:id', authenticateAdmin, upload.any(), async (req, res) => {
     }
 
     await transaction.commit();
+
+    // Проверяем снижение цены и отправляем push-уведомление
+    const newPrice = parseFloat(product.basePrice);
+    if (oldPrice > newPrice) {
+      try {
+        await notifyPriceDrop(product, oldPrice, newPrice);
+      } catch (pushError) {
+        console.error('Ошибка отправки push-уведомления о снижении цены:', pushError);
+        // Не прерываем выполнение, если push не отправился
+      }
+    }
 
     // Получаем обновленный товар
     const updatedProduct = await Product.findByPk(productId, {
