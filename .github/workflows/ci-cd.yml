@@ -1,5 +1,5 @@
 # CI/CD для репозитория wayces-server (отдельный репо).
-# Секреты в настройках репо: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN, VPS_HOST, VPS_USER, VPS_SSH_KEY.
+# Секреты: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN, VPS_HOST, VPS_USER, VPS_SSH_PASSWORD (вход по паролю).
 name: CI/CD
 
 on:
@@ -45,7 +45,7 @@ jobs:
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
+          password: ${{ secrets.VPS_SSH_PASSWORD }}
           script: |
             if [ "${{ github.ref_name }}" = "main" ]; then
               CDIR="/var/www/docker_wayces"
