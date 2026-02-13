@@ -12,7 +12,7 @@ const app = express();
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
   credentials: true,
-  exposedHeaders: ['X-New-Access-Token'], // Разрешаем доступ к кастомному заголовку
+  exposedHeaders: ['X-New-Access-Token', 'X-New-Version'],
 }));
 
 app.use(express.json());
@@ -21,6 +21,16 @@ app.use(cookieParser());
 
 // Статические файлы для загруженных изображений
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Проверка версии фронта (только для залогиненных): если версия устарела — 426, клиент перезагрузит страницу
+app.use('/api', (req, res, next) => {
+  const serverVersion = process.env.FRONTEND_VERSION;
+  if (!serverVersion || !req.headers.authorization?.startsWith('Bearer ')) return next();
+  const clientVersion = (req.headers['x-client-version'] || '').trim();
+  if (clientVersion === serverVersion) return next();
+  res.setHeader('X-New-Version', serverVersion);
+  return res.status(426).json({ error: { message: 'Вышло обновление приложения. Перезагрузка страницы…' } });
+});
 
 // Роуты
 app.get('/', (req, res) => {
