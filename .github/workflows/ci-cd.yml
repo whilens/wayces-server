@@ -1,5 +1,5 @@
 # CI/CD для репозитория wayces-server (отдельный репо).
-# Секреты в настройках репо: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN.
+# Секреты в настройках репо: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN, VPS_HOST, VPS_USER, VPS_SSH_KEY.
 name: CI/CD
 
 on:
@@ -34,3 +34,27 @@ jobs:
         run: |
           docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/wayces-server:${{ github.ref_name }} .
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/wayces-server:${{ github.ref_name }}
+
+  deploy:
+    needs: docker
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/qa')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            if [ "${{ github.ref_name }}" = "main" ]; then
+              CDIR="/var/www/docker_wayces"
+              PNAME="waycess"
+            else
+              CDIR="/var/www/docker_wayces_qa"
+              PNAME="waycess-qa"
+            fi
+            cd "$CDIR"
+            BRANCH=${{ github.ref_name }} docker compose -p $PNAME -f docker-compose.yml pull server
+            BRANCH=${{ github.ref_name }} docker compose -p $PNAME -f docker-compose.yml up -d server
+            docker image prune -f
