@@ -93,9 +93,10 @@ const startServer = async () => {
     }
 
     // Запуск сервера
-    app.listen(PORT, () => {
+    // Слушаем на 0.0.0.0 чтобы быть доступным извне (для Docker и проксирования)
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Сервер запущен на порту ${PORT}`);
-      console.log(`🌐 API доступен: http://localhost:${PORT}/api`);
+      console.log(`🌐 API доступен: http://0.0.0.0:${PORT}/api`);
     });
   } catch (error) {
     console.error('❌ Ошибка подключения к БД:', error.message);
