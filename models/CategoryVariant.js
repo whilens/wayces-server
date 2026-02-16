@@ -23,7 +23,7 @@ const CategoryVariant = sequelize.define('CategoryVariant', {
     field: 'variant_name',
   },
   variantType: {
-    type: DataTypes.ENUM('button', 'select'),
+    type: DataTypes.ENUM('button', 'select', 'color'),
     defaultValue: 'button',
     field: 'variant_type',
   },
@@ -41,6 +41,14 @@ const CategoryVariant = sequelize.define('CategoryVariant', {
     type: DataTypes.STRING(50),
     allowNull: true,
     field: 'unit',
+  },
+  // Список доступных значений варианта. Ключ опции генерируется: variantKey + "-" + slug(value)
+  optionValues: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    field: 'option_values',
+    defaultValue: [],
+    comment: 'Массив { value, colorCode? }. Например [{ value: "38" }, { value: "Черный", colorCode: "#000" }]',
   },
 }, {
   tableName: 'category_variants',

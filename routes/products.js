@@ -176,9 +176,20 @@ router.get('/', async (req, res) => {
       });
     }
 
+    // Загружаем настройки категорий (одна карточка на товар vs каждая комплектация отдельно)
+    const categoryIds = [...new Set(filteredProducts.map((p) => p.categoryId).filter(Boolean))];
+    const categoriesMap = new Map();
+    if (categoryIds.length > 0) {
+      const cats = await Category.findAll({
+        where: { id: categoryIds },
+        attributes: ['id', 'listCombinationsSeparately'],
+      });
+      cats.forEach((c) => categoriesMap.set(c.id, c));
+    }
+
     // ОПТИМИЗАЦИЯ: Генерируем комбинации только для отфильтрованных товаров
     const productsWithCombinations = [];
-    
+
     // ОПТИМИЗАЦИЯ: Собираем все ID комбинаций для массовой загрузки опций
     const allCombinationIds = [];
     filteredProducts.forEach(product => {
@@ -221,12 +232,16 @@ router.get('/', async (req, res) => {
 
     for (const product of filteredProducts) {
       if (product.variants && product.variants.length > 0) {
+        const category = product.categoryId ? categoriesMap.get(product.categoryId) : null;
+        const listSeparately = category ? category.listCombinationsSeparately === true : true;
+        const productCombinationItems = [];
+
         // ОПТИМИЗАЦИЯ: Используем комбинации из БД, если они есть
         if (product.combinations && product.combinations.length > 0) {
           // Используем комбинации из БД
           for (const dbCombination of product.combinations) {
             if (dbCombination.isActive === false) continue;
-            
+
             // Получаем варианты комбинации из загруженных опций (оптимизация: один запрос для всех)
             const combVariants = {};
             const combOptions = combinationOptionsMap.get(dbCombination.id) || [];
@@ -238,7 +253,7 @@ router.get('/', async (req, res) => {
                 }
               });
             }
-            
+
             // ОПТИМИЗАЦИЯ: Применяем фильтры по вариантам во время обработки
             if (variantFilters && Object.keys(variantFilters).length > 0) {
               const matchesFilter = Object.entries(variantFilters).every(([variantKey, optionValue]) => {
@@ -246,17 +261,17 @@ router.get('/', async (req, res) => {
               });
               if (!matchesFilter) continue; // Пропускаем эту комбинацию
             }
-            
+
             // ОПТИМИЗАЦИЯ: Проверяем цену во время обработки
             const finalPrice = parseFloat(dbCombination.price);
             if (minPrice !== null && finalPrice < minPrice) continue;
             if (maxPrice !== null && finalPrice > maxPrice) continue;
-            
+
             // Формируем структуру вариантов для фронтенда
             const variantsForFrontend = formatVariantsForFrontend(product.variants);
-            
+
             const combinationImage = getCombinationImage(product, combVariants, product.variants);
-            productsWithCombinations.push({
+            productCombinationItems.push({
               id: `${product.id}-${dbCombination.combinationKey}`,
               productId: product.id,
               name: product.name,
@@ -285,7 +300,7 @@ router.get('/', async (req, res) => {
                 .sort()
                 .map(key => `${key}-${current[key]}`)
                 .join('_');
-              
+
               // ОПТИМИЗАЦИЯ: Применяем фильтры по вариантам во время генерации
               if (variantFilters && Object.keys(variantFilters).length > 0) {
                 const matchesFilter = Object.entries(variantFilters).every(([variantKey, optionValue]) => {
@@ -293,19 +308,19 @@ router.get('/', async (req, res) => {
                 });
                 if (!matchesFilter) return; // Пропускаем эту комбинацию
               }
-              
+
               // Вычисляем цену на основе модификаторов
               const finalPrice = calculatePriceWithModifiers(parseFloat(product.basePrice), current, product.variants);
-              
+
               // ОПТИМИЗАЦИЯ: Проверяем цену во время генерации
               if (minPrice !== null && finalPrice < minPrice) return;
               if (maxPrice !== null && finalPrice > maxPrice) return;
-              
+
               // Формируем структуру вариантов для фронтенда
               const variantsForFrontend = formatVariantsForFrontend(product.variants);
 
               const combinationImage = getCombinationImage(product, current, product.variants);
-              productsWithCombinations.push({
+              productCombinationItems.push({
                 id: `${product.id}-${combinationKey}`,
                 productId: product.id,
                 name: product.name,
@@ -343,6 +358,37 @@ router.get('/', async (req, res) => {
         };
 
         generateCombinations(product.variants);
+        }
+
+        // Одна карточка на товар (категория: listCombinationsSeparately = false) или все комбинации
+        if (!listSeparately && productCombinationItems.length > 0) {
+          const prices = productCombinationItems.map((item) => item.price);
+          const priceMin = Math.min(...prices);
+          const priceMax = Math.max(...prices);
+          const firstItem = productCombinationItems[0];
+          const variantsForFrontend = formatVariantsForFrontend(product.variants);
+          productsWithCombinations.push({
+            id: `product-${product.id}`,
+            productId: product.id,
+            name: product.name,
+            fullName: product.name,
+            price: priceMin,
+            priceMax: priceMax,
+            basePrice: parseFloat(product.basePrice),
+            image: product.defaultImage || firstItem.image || null,
+            defaultImage: product.defaultImage || null,
+            displayAsProduct: true,
+            discountType: product.discountType,
+            discountValue: product.discountValue ? parseFloat(product.discountValue) : null,
+            baseProduct: {
+              id: product.id,
+              name: product.name,
+              specifications: product.specifications,
+              variants: Object.keys(variantsForFrontend).length > 0 ? variantsForFrontend : null,
+            },
+          });
+        } else {
+          productsWithCombinations.push(...productCombinationItems);
         }
       } else {
         // Товар без вариантов
