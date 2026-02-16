@@ -180,6 +180,7 @@ router.get('/:categoryId/full', authenticateAdmin, async (req, res) => {
         isRequired: variant.isRequired,
         displayOrder: variant.displayOrder,
         unit: variant.unit || null,
+        optionValues: variant.optionValues && Array.isArray(variant.optionValues) ? variant.optionValues : [],
       })),
       fileConfig: fileConfig ? {
         specifications: fileConfig.specifications || [],
@@ -313,11 +314,22 @@ router.delete('/:categoryId/specifications/:id', authenticateAdmin, async (req, 
   }
 });
 
+// Нормализация optionValues из запроса: [{ value, colorCode? }, ...]
+function normalizeOptionValues(optionValues) {
+  if (!optionValues || !Array.isArray(optionValues)) return [];
+  return optionValues
+    .map((opt) => ({
+      value: opt && String(opt.value || '').trim(),
+      colorCode: opt && opt.colorCode ? String(opt.colorCode).trim() || null : null,
+    }))
+    .filter((opt) => opt.value !== '');
+}
+
 // POST /api/admin/category-config/:categoryId/variants - Добавить вариант
 router.post('/:categoryId/variants', authenticateAdmin, async (req, res) => {
   try {
     const categoryId = parseInt(req.params.categoryId);
-    const { key, name, type, isRequired, displayOrder, unit } = req.body;
+    const { key, name, type, isRequired, displayOrder, unit, optionValues } = req.body;
     
     if (isNaN(categoryId)) {
       return res.status(400).json({ error: 'Неверный ID категории' });
@@ -327,13 +339,11 @@ router.post('/:categoryId/variants', authenticateAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Поля key, name и type обязательны' });
     }
     
-    // Проверяем, что категория существует
     const category = await Category.findByPk(categoryId);
     if (!category) {
       return res.status(404).json({ error: 'Категория не найдена' });
     }
     
-    // Проверяем, что вариант с таким key еще не существует
     const existing = await CategoryVariant.findOne({
       where: { categoryId, variantKey: key },
     });
@@ -342,7 +352,6 @@ router.post('/:categoryId/variants', authenticateAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Вариант с таким ключом уже существует' });
     }
     
-    // Создаем вариант
     const variant = await CategoryVariant.create({
       categoryId,
       variantKey: key,
@@ -351,6 +360,7 @@ router.post('/:categoryId/variants', authenticateAdmin, async (req, res) => {
       isRequired: isRequired !== undefined ? isRequired : true,
       displayOrder: displayOrder || 0,
       unit: unit || null,
+      optionValues: normalizeOptionValues(optionValues),
     });
     
     res.status(201).json(variant);
@@ -365,7 +375,7 @@ router.put('/:categoryId/variants/:id', authenticateAdmin, async (req, res) => {
   try {
     const categoryId = parseInt(req.params.categoryId);
     const id = parseInt(req.params.id);
-    const { key, name, type, isRequired, displayOrder, unit } = req.body;
+    const { key, name, type, isRequired, displayOrder, unit, optionValues } = req.body;
     
     if (isNaN(categoryId) || isNaN(id)) {
       return res.status(400).json({ error: 'Неверный ID' });
@@ -379,7 +389,6 @@ router.put('/:categoryId/variants/:id', authenticateAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Вариант не найден' });
     }
     
-    // Если меняется key, проверяем уникальность
     if (key && key !== variant.variantKey) {
       const existing = await CategoryVariant.findOne({
         where: { categoryId, variantKey: key },
@@ -390,15 +399,19 @@ router.put('/:categoryId/variants/:id', authenticateAdmin, async (req, res) => {
       }
     }
     
-    // Обновляем вариант
-    await variant.update({
+    const updateData = {
       variantKey: key || variant.variantKey,
       variantName: name || variant.variantName,
       variantType: type || variant.variantType,
       isRequired: isRequired !== undefined ? isRequired : variant.isRequired,
       displayOrder: displayOrder !== undefined ? displayOrder : variant.displayOrder,
       unit: unit !== undefined ? unit : variant.unit,
-    });
+    };
+    if (optionValues !== undefined) {
+      updateData.optionValues = normalizeOptionValues(optionValues);
+    }
+    
+    await variant.update(updateData);
     
     res.json(variant);
   } catch (error) {

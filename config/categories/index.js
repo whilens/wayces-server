@@ -4,6 +4,13 @@
  * Приоритет: сначала БД, потом файлы
  */
 
+/** Генерация ключа опции из ключа варианта и значения: size + "38" → "size-38" */
+function generateOptionKey(variantKey, value) {
+  if (value == null || value === '') return variantKey;
+  const slug = String(value).trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || String(value).trim();
+  return `${variantKey}-${slug}`;
+}
+
 const smartphones = require('./smartphones');
 const shoes = require('./shoes');
 
@@ -53,13 +60,22 @@ async function loadCategoryConfigFromDB(categoryId) {
         options: spec.specOptions || null,
         unit: spec.unit || null,
       })),
-      variants: variants.map(variant => ({
-        key: variant.variantKey,
-        name: variant.variantName,
-        type: variant.variantType,
-        isRequired: variant.isRequired,
-        unit: variant.unit || null,
-      })),
+      variants: variants.map(variant => {
+        const optionValues = variant.optionValues && Array.isArray(variant.optionValues) ? variant.optionValues : [];
+        const options = optionValues.map((opt) => ({
+          key: generateOptionKey(variant.variantKey, opt.value),
+          value: opt.value,
+          colorCode: opt.colorCode || null,
+        }));
+        return {
+          key: variant.variantKey,
+          name: variant.variantName,
+          type: variant.variantType,
+          isRequired: variant.isRequired,
+          unit: variant.unit || null,
+          options,
+        };
+      }),
     };
   } catch (error) {
     console.error('Ошибка загрузки конфигурации из БД:', error);

@@ -26,6 +26,7 @@ const {
 const path = require('path');
 const fs = require('fs');
 const { notifyNewProduct, notifyPriceDrop } = require('../../utils/pushNotifications');
+const { generateNextSku } = require('../../utils/skuGenerator');
 
 // Генерация slug из названия
 const generateSlug = (name) => {
@@ -348,6 +349,12 @@ router.post('/', authenticateAdmin, upload.any(), async (req, res) => {
 
         if (!combinationKey) continue; // Пропускаем пустые комбинации
 
+        // SKU: ручной или автогенерация (код категории + счётчик)
+        let sku = combData.sku && String(combData.sku).trim() ? combData.sku.trim() : null;
+        if (!sku && product.categoryId) {
+          sku = await generateNextSku(product.categoryId, transaction);
+        }
+
         // Создаем комбинацию
         const combination = await ProductCombination.create(
           {
@@ -355,7 +362,7 @@ router.post('/', authenticateAdmin, upload.any(), async (req, res) => {
             combinationKey,
             price: parseFloat(combData.price || basePrice),
             stockQuantity: parseInt(combData.stockQuantity || 0),
-            sku: combData.sku || null,
+            sku,
             isActive: true,
           },
           { transaction }
@@ -836,6 +843,12 @@ router.put('/:id', authenticateAdmin, upload.any(), async (req, res) => {
 
           if (!combinationKey) continue; // Пропускаем пустые комбинации
 
+          // SKU: ручной или автогенерация по категории
+          let sku = combData.sku && String(combData.sku).trim() ? combData.sku.trim() : null;
+          if (!sku && product.categoryId) {
+            sku = await generateNextSku(product.categoryId, transaction);
+          }
+
           // Создаем комбинацию
           const combination = await ProductCombination.create(
             {
@@ -843,7 +856,7 @@ router.put('/:id', authenticateAdmin, upload.any(), async (req, res) => {
               combinationKey,
               price: parseFloat(combData.price || product.basePrice || 0),
               stockQuantity: parseInt(combData.stockQuantity || 0),
-              sku: combData.sku || null,
+              sku,
               isActive: true,
             },
             { transaction }
