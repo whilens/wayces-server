@@ -4,7 +4,7 @@ const rateLimit = require('express-rate-limit');
 const nodemailer = require('nodemailer');
 const escapeHtml = require('escape-html');
 const sequelize = require('../config/sequelize');
-const { Order, OrderItem } = require('../models');
+const { Order, OrderItem, ProductCombination } = require('../models');
 const { authenticateAdmin } = require('../middleware/authMiddleware');
 
 // Rate limiting для защиты от спама
@@ -18,13 +18,13 @@ const orderLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Настройка SMTP транспорта для Gmail
+// Настройка SMTP транспорта
 const createTransporter = () => {
   return nodemailer.createTransport({
     service: 'gmail',
     auth: {
-      user: process.env.SMTP_USER || 'artem.ger134@gmail.com',
-      pass: process.env.SMTP_PASSWORD, // Пароль приложения Gmail
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASSWORD, // Пароль приложения или API-ключ
     },
   });
 };
@@ -241,6 +241,13 @@ router.post('/', orderLimiter, async (req, res) => {
     // Сохраняем нормализованный телефон
     const finalPhone = normalizedPhone;
 
+    // Пересчитываем итоговую сумму на сервере (не доверяем totalPrice из клиента)
+    const calculatedTotal = items.reduce((sum, item) => {
+      const price = Number(item.price) || 0;
+      const qty = Number(item.quantity) || 0;
+      return sum + price * qty;
+    }, 0);
+
     // Формируем данные заказа
     const orderData = {
       firstName,
@@ -253,13 +260,46 @@ router.post('/', orderLimiter, async (req, res) => {
       apartment,
       comment: comment || '',
       items,
-      totalPrice: parseFloat(totalPrice),
+      totalPrice: calculatedTotal,
     };
 
     // Используем транзакцию для атомарности операций
     const transaction = await sequelize.transaction();
 
     try {
+      // Проверка остатков и блокировка комплектаций (для товаров с вариантами)
+      const combinationKeyFromVariants = (variants) =>
+        Object.keys(variants || {})
+          .sort()
+          .map((k) => `${k}-${variants[k]}`)
+          .join('_');
+
+      for (const item of items) {
+        if (item.variants && Object.keys(item.variants).length > 0) {
+          const combinationKey = combinationKeyFromVariants(item.variants);
+          const comb = await ProductCombination.findOne({
+            where: { productId: item.id, combinationKey },
+            lock: transaction.LOCK.UPDATE,
+            transaction,
+          });
+          if (!comb) {
+            await transaction.rollback();
+            return res.status(400).json({
+              error: 'Ошибка при оформлении заказа',
+              message: `Комплектация для товара «${item.name}» не найдена или недоступна.`,
+            });
+          }
+          const stock = comb.stockQuantity ?? 0;
+          if (stock < item.quantity) {
+            await transaction.rollback();
+            return res.status(400).json({
+              error: 'Недостаточно товара в наличии',
+              message: `По позиции «${item.name}» доступно ${stock} шт., запрошено ${item.quantity}. Обновите корзину.`,
+            });
+          }
+        }
+      }
+
       // Создаем заказ в БД
       const order = await Order.create(
         {
@@ -272,7 +312,7 @@ router.post('/', orderLimiter, async (req, res) => {
           house,
           apartment,
           comment: comment || '',
-          totalPrice: parseFloat(totalPrice),
+          totalPrice: calculatedTotal,
           status: 'pending',
           userId: userId || null, // Связываем с пользователем, если авторизован
         },
@@ -298,11 +338,22 @@ router.post('/', orderLimiter, async (req, res) => {
         )
       );
 
+      // Списываем остаток по комплектациям
+      for (const item of items) {
+        if (item.variants && Object.keys(item.variants).length > 0) {
+          const combinationKey = combinationKeyFromVariants(item.variants);
+          await ProductCombination.decrement(
+            'stockQuantity',
+            { by: item.quantity, where: { productId: item.id, combinationKey }, transaction }
+          );
+        }
+      }
+
       // Отправляем email
       const transporter = createTransporter();
       const mailOptions = {
-        from: process.env.SMTP_USER || 'artem.ger134@gmail.com',
-        to: process.env.ORDER_EMAIL || 'artem.ger134@gmail.com',
+        from: process.env.SMTP_USER,
+        to: process.env.ORDER_EMAIL || process.env.SMTP_USER,
         subject: `Новый заказ от ${firstName} ${lastName}`,
         html: formatOrderEmail(orderData),
       };

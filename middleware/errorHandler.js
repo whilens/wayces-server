@@ -8,7 +8,7 @@ const errorHandler = (err, req, res, next) => {
     stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
     url: req.url,
     method: req.method,
-    body: req.body,
+    ...(process.env.NODE_ENV === 'development' && { body: req.body }),
   });
 
   // Ошибки валидации

@@ -241,6 +241,7 @@ router.get('/', async (req, res) => {
           // Используем комбинации из БД
           for (const dbCombination of product.combinations) {
             if (dbCombination.isActive === false) continue;
+            if ((dbCombination.stockQuantity ?? 0) <= 0) continue; // не показывать в каталоге комплектации без остатка
 
             // Получаем варианты комбинации из загруженных опций (оптимизация: один запрос для всех)
             const combVariants = {};
