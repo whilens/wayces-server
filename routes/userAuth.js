@@ -228,7 +228,7 @@ router.post('/register', async (req, res) => {
     // Проверяем токен регистрации
     let decoded;
     try {
-      decoded = jwt.verify(registrationToken, process.env.JWT_SECRET || 'your-secret-key');
+      decoded = jwt.verify(registrationToken, JWT_SECRET);
     } catch (err) {
       return res.status(400).json({ error: 'Токен регистрации истек или невалиден' });
     }
@@ -358,7 +358,7 @@ router.get('/me', async (req, res) => {
     
     let decoded;
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+      decoded = jwt.verify(token, JWT_SECRET);
     } catch (err) {
       return res.status(401).json({ error: 'Токен невалиден' });
     }
@@ -395,7 +395,7 @@ async function generateTokens(user) {
       phone: user.phone,
       type: 'user',
     },
-    process.env.JWT_SECRET || 'your-secret-key',
+    JWT_SECRET,
     { expiresIn: '15m' }
   );
 
