@@ -318,17 +318,21 @@ router.post('/', authenticateAdmin, upload.any(), async (req, res) => {
       }
     }
 
-    // Создаем комплектации, переданные админом (вместо автоматической генерации)
-    if (combinations && parsedVariants.length > 0) {
-      let parsedCombinations;
+    // Парсим combinations: если передан непустой массив — создаём из него; иначе при наличии вариантов — автогенерация
+    let parsedCombinations = null;
+    if (combinations != null && String(combinations).trim() !== '') {
       try {
         parsedCombinations = safeParseJSONOrThrow(combinations, 'combinations');
       } catch (error) {
         await transaction.rollback();
         return res.status(400).json({ error: error.message });
       }
-      
-      // Получаем варианты с опциями для создания связей
+    }
+
+    const hasExplicitCombinations = Array.isArray(parsedCombinations) && parsedCombinations.length > 0;
+
+    if (hasExplicitCombinations && parsedVariants.length > 0) {
+      // Комплектации переданы админом — создаём только их (с дедубликацией по combinationKey)
       const dbVariants = await ProductVariant.findAll({
         where: { productId: product.id },
         include: [{ model: ProductVariantOption, as: 'options' }],
@@ -340,22 +344,22 @@ router.post('/', authenticateAdmin, upload.any(), async (req, res) => {
         variantMap[v.variantKey] = v;
       });
 
+      const seenKeys = new Set();
       for (const combData of parsedCombinations) {
-        // Формируем ключ комбинации
         const combinationKey = Object.keys(combData.variants || {})
           .sort()
           .map((key) => `${key}-${combData.variants[key]}`)
           .join('_');
 
-        if (!combinationKey) continue; // Пропускаем пустые комбинации
+        if (!combinationKey) continue;
+        if (seenKeys.has(combinationKey)) continue;
+        seenKeys.add(combinationKey);
 
-        // SKU: ручной или автогенерация (код категории + счётчик)
         let sku = combData.sku && String(combData.sku).trim() ? combData.sku.trim() : null;
         if (!sku && product.categoryId) {
           sku = await generateNextSku(product.categoryId, transaction);
         }
 
-        // Создаем комбинацию
         const combination = await ProductCombination.create(
           {
             productId: product.id,
@@ -368,7 +372,6 @@ router.post('/', authenticateAdmin, upload.any(), async (req, res) => {
           { transaction }
         );
 
-        // Создаем связи комбинации с опциями
         for (const [variantKey, optionKey] of Object.entries(combData.variants || {})) {
           const variant = variantMap[variantKey];
           if (variant) {
@@ -377,6 +380,85 @@ router.post('/', authenticateAdmin, upload.any(), async (req, res) => {
               await ProductCombinationOption.create(
                 {
                   combinationId: combination.id,
+                  optionId: option.id,
+                },
+                { transaction }
+              );
+            }
+          }
+        }
+      }
+    } else if (parsedVariants.length > 0) {
+      // Комплектации не переданы или пусты — автогенерация по декартову произведению вариантов
+      const dbVariants = await ProductVariant.findAll({
+        where: { productId: product.id },
+        include: [{ model: ProductVariantOption, as: 'options' }],
+        transaction,
+      });
+
+      const variantMap = {};
+      dbVariants.forEach((v) => {
+        variantMap[v.variantKey] = {
+          key: v.variantKey,
+          options: v.options.map((opt) => ({
+            key: opt.optionKey,
+            priceModifier: parseFloat(opt.priceModifier || 0),
+            isAvailable: opt.isAvailable !== false,
+          })),
+        };
+      });
+
+      const generateCombinations = (variants, current = {}, index = 0) => {
+        if (index === variants.length) {
+          return [current];
+        }
+        const variant = variants[index];
+        const result = [];
+        variant.options.forEach((option) => {
+          if (option.isAvailable !== false) {
+            const newCurrent = { ...current, [variant.key]: option.key };
+            result.push(...generateCombinations(variants, newCurrent, index + 1));
+          }
+        });
+        return result;
+      };
+
+      const generatedCombinations = generateCombinations(Object.values(variantMap));
+
+      for (const combination of generatedCombinations) {
+        const combinationKey = Object.keys(combination)
+          .sort()
+          .map((key) => `${key}-${combination[key]}`)
+          .join('_');
+
+        let combinationPrice = parseFloat(basePrice);
+        for (const [variantKey, optionKey] of Object.entries(combination)) {
+          const variant = variantMap[variantKey];
+          const option = variant.options.find((opt) => opt.key === optionKey);
+          if (option) {
+            combinationPrice += option.priceModifier;
+          }
+        }
+
+        const createdCombination = await ProductCombination.create(
+          {
+            productId: product.id,
+            combinationKey,
+            price: combinationPrice,
+            stockQuantity: 0,
+            isActive: true,
+          },
+          { transaction }
+        );
+
+        for (const [variantKey, optionKey] of Object.entries(combination)) {
+          const variant = dbVariants.find((v) => v.variantKey === variantKey);
+          if (variant) {
+            const option = variant.options?.find((opt) => opt.optionKey === optionKey);
+            if (option) {
+              await ProductCombinationOption.create(
+                {
+                  combinationId: createdCombination.id,
                   optionId: option.id,
                 },
                 { transaction }
@@ -834,22 +916,22 @@ router.put('/:id', authenticateAdmin, upload.any(), async (req, res) => {
           variantMap[v.variantKey] = v;
         });
 
+        const seenKeys = new Set();
         for (const combData of parsedCombinations) {
-          // Формируем ключ комбинации
           const combinationKey = Object.keys(combData.variants || {})
             .sort()
             .map((key) => `${key}-${combData.variants[key]}`)
             .join('_');
 
-          if (!combinationKey) continue; // Пропускаем пустые комбинации
+          if (!combinationKey) continue;
+          if (seenKeys.has(combinationKey)) continue;
+          seenKeys.add(combinationKey);
 
-          // SKU: ручной или автогенерация по категории
           let sku = combData.sku && String(combData.sku).trim() ? combData.sku.trim() : null;
           if (!sku && product.categoryId) {
             sku = await generateNextSku(product.categoryId, transaction);
           }
 
-          // Создаем комбинацию
           const combination = await ProductCombination.create(
             {
               productId: product.id,
