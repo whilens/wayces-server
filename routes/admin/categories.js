@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { authenticateAdmin } = require('../../middleware/authMiddleware');
-const { Category } = require('../../models');
+const { Category, CategorySpecification, CategoryVariant, Product } = require('../../models');
+const sequelize = require('../../config/sequelize');
 
 // GET /api/admin/categories - Получить все категории
 router.get('/', authenticateAdmin, async (req, res) => {
@@ -119,6 +120,53 @@ router.put('/:id', authenticateAdmin, async (req, res) => {
   } catch (error) {
     console.error('Ошибка обновления категории:', error);
     res.status(500).json({ error: 'Ошибка обновления категории', message: error.message });
+  }
+});
+
+// DELETE /api/admin/categories/:id - Удалить категорию
+router.delete('/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Некорректный ID категории' });
+    }
+    const category = await Category.findByPk(id);
+    if (!category) {
+      return res.status(404).json({ error: 'Категория не найдена' });
+    }
+
+    const childrenCount = await Category.count({ where: { parentId: id } });
+    if (childrenCount > 0) {
+      return res.status(400).json({
+        error: 'Нельзя удалить категорию, у которой есть подкатегории. Сначала удалите или переназначьте подкатегории.',
+      });
+    }
+
+    const productsCount = await Product.count({ where: { categoryId: id } });
+    if (productsCount > 0) {
+      return res.status(400).json({
+        error: 'Нельзя удалить категорию, к которой привязаны товары. Сначала смените категорию у товаров или удалите их.',
+      });
+    }
+
+    const transaction = await sequelize.transaction();
+    try {
+      await CategorySpecification.destroy({ where: { categoryId: id }, transaction });
+      await CategoryVariant.destroy({ where: { categoryId: id }, transaction });
+      await category.destroy({ transaction });
+      await transaction.commit();
+    } catch (txError) {
+      await transaction.rollback();
+      throw txError;
+    }
+
+    res.json({
+      message: 'Категория успешно удалена',
+      id,
+    });
+  } catch (error) {
+    console.error('Ошибка удаления категории:', error);
+    res.status(500).json({ error: 'Ошибка удаления категории', message: error.message });
   }
 });
 
