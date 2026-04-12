@@ -282,6 +282,7 @@ router.get('/', async (req, res) => {
               image: combinationImage || product.defaultImage || null,
               defaultImage: product.defaultImage || null,
               combinationKey: dbCombination.combinationKey,
+              combinationId: dbCombination.id,
               variants: combVariants,
               discountType: product.discountType,
               discountValue: product.discountValue ? parseFloat(product.discountValue) : null,
@@ -331,6 +332,7 @@ router.get('/', async (req, res) => {
                 image: combinationImage || product.defaultImage || null,
                 defaultImage: product.defaultImage || null,
                 combinationKey: combinationKey,
+                combinationId: null,
                 variants: current,
                 discountType: product.discountType,
                 discountValue: product.discountValue ? parseFloat(product.discountValue) : null,
@@ -367,6 +369,10 @@ router.get('/', async (req, res) => {
           const priceMin = Math.min(...prices);
           const priceMax = Math.max(...prices);
           const firstItem = productCombinationItems[0];
+          const linkItem =
+            productCombinationItems.find(
+              (i) => Math.abs(Number(i.price) - priceMin) < 1e-6
+            ) || firstItem;
           const variantsForFrontend = formatVariantsForFrontend(product.variants);
           productsWithCombinations.push({
             id: `product-${product.id}`,
@@ -379,6 +385,9 @@ router.get('/', async (req, res) => {
             image: product.defaultImage || firstItem.image || null,
             defaultImage: product.defaultImage || null,
             displayAsProduct: true,
+            // Ссылка на карточку: комплектация с минимальной ценой среди показанных в каталоге
+            linkCombinationKey: linkItem.combinationKey,
+            linkCombinationId: linkItem.combinationId ?? null,
             discountType: product.discountType,
             discountValue: product.discountValue ? parseFloat(product.discountValue) : null,
             baseProduct: {
