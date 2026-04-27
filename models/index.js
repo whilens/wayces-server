@@ -17,6 +17,7 @@ const OrderCancellation = require('./OrderCancellation');
 const CategorySpecification = require('./CategorySpecification');
 const CategoryVariant = require('./CategoryVariant');
 const PushSubscription = require('./PushSubscription');
+const ChatConversation = require('./ChatConversation');
 
 // Определение связей
 
@@ -118,5 +119,6 @@ module.exports = {
   CategorySpecification,
   CategoryVariant,
   PushSubscription,
+  ChatConversation,
 };
 

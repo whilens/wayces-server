@@ -1,0 +1,9 @@
+row_type,product_external_id,name,base_price,category_id,description,is_active,discount_type,discount_value,specifications_json,variant_key,variant_name,variant_type,variant_display_order,variant_is_required,option_key,option_value,color_code,price_modifier,option_is_default,option_is_available,option_stock_quantity,option_display_order,combination_sku,combination_price,combination_stock_quantity,combination_is_active,combination_variants_json
+product,NK-AIRMAX-W,Nike Air Max зимние,5699,3,Зимние кроссовки,true,,,"{""season"":""зима"",""material"":""кожа""}",,,,,,,,,,,,,,,,,,,
+variant,NK-AIRMAX-W,,,,,,,,,color,Цвет,color,0,true,white,Белый,#FFFFFF,0,false,true,0,0,,,,,
+variant,NK-AIRMAX-W,,,,,,,,,color,Цвет,color,0,true,black,Чёрный,#000000,0,false,true,0,1,,,,,
+variant,NK-AIRMAX-W,,,,,,,,,size,Размер,button,1,true,38,38,,0,false,true,0,0,,,,,
+variant,NK-AIRMAX-W,,,,,,,,,size,Размер,button,1,true,39,39,,0,false,true,0,1,,,,,
+variant,NK-AIRMAX-W,,,,,,,,,size,Размер,button,1,true,40,40,,0,false,true,0,2,,,,,
+combination,NK-AIRMAX-W,,,,,,,,,,,,,,,,,,,,,,,NK-AIRMAX-W-WHT-40,5699,10,true,"{""color"":""white"",""size"":""40""}"
+combination,NK-AIRMAX-W,,,,,,,,,,,,,,,,,,,,,,,NK-AIRMAX-W-BLK-39,5699,7,true,"{""color"":""black"",""size"":""39""}"

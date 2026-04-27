@@ -10,6 +10,7 @@ const {
   ProductVariantOption,
   ProductCombination,
   ProductCombinationOption,
+  ChatConversation,
 } = require('../models');
 const { completeChat } = require('../services/openRouterChat');
 
@@ -133,6 +134,36 @@ function buildNaturalCombinationLine(opts) {
   return parts.join(', ');
 }
 
+/**
+ * Fallback: разбираем combinationKey вида
+ * "color-color-Белый_size-size-40" -> "Белый, 40 размер"
+ */
+function naturalLineFromCombinationKey(combinationKey) {
+  const key = String(combinationKey || '').trim();
+  if (!key) return '';
+
+  const raw = key
+    .split('_')
+    .map((chunk) => chunk.trim())
+    .filter(Boolean)
+    .map((chunk) => {
+      const i = chunk.indexOf('-');
+      if (i < 0) return chunk;
+      const variantKey = chunk.slice(0, i).trim();
+      let optionPart = chunk.slice(i + 1).trim();
+      const pref = `${variantKey}-`;
+      if (optionPart.toLowerCase().startsWith(pref.toLowerCase())) {
+        optionPart = optionPart.slice(pref.length).trim();
+      }
+      return optionPart || chunk;
+    });
+
+  if (!raw.length) return '';
+  return buildNaturalCombinationLine(
+    raw.map((v) => ({ ProductVariantOption: { optionValue: v } }))
+  );
+}
+
 /** Комбинации — источник истины по остаткам и цене, если склад ведётся в product_combinations */
 function combinationsForPrompt(p) {
   const combs = (p.combinations || []).filter((c) => c.isActive !== false);
@@ -146,7 +177,10 @@ function combinationsForPrompt(p) {
       c.ProductCombinationOptions ||
       [];
     const comboLabel =
-      buildNaturalCombinationLine(opts) || c.combinationKey || 'комбинация';
+      buildNaturalCombinationLine(opts) ||
+      naturalLineFromCombinationKey(c.combinationKey) ||
+      c.combinationKey ||
+      'комбинация';
     const stock = c.stockQuantity ?? 0;
     const price = c.price != null ? parseFloat(c.price) : NaN;
     const priceStr = Number.isFinite(price) ? `, цена ${price}` : '';
@@ -421,6 +455,7 @@ function pickChatProductLink(p) {
 }
 
 const CHAT_COMBINATIONS_LIMIT = 32;
+const CHAT_HISTORY_LIMIT = 40;
 
 /** Комплектации для клиента (чат, подборка): цена, остаток, подпись, ссылка по combinationId */
 function mapCombinationsForClient(p) {
@@ -438,10 +473,14 @@ function mapCombinationsForClient(p) {
       if (!pvo) continue;
       const variant = pvo.variant;
       const vk = variant?.variantKey;
-      const ok = pvo.optionKey;
-      if (vk && ok != null) variants[vk] = ok;
+      const ov = pvo.optionValue;
+      if (vk && ov != null) variants[vk] = ov;
     }
-    const label = buildNaturalCombinationLine(opts) || c.combinationKey || '';
+    const label =
+      buildNaturalCombinationLine(opts) ||
+      naturalLineFromCombinationKey(c.combinationKey) ||
+      c.combinationKey ||
+      '';
     out.push({
       id: c.id,
       combinationKey: c.combinationKey || null,
@@ -469,6 +508,37 @@ function mapProductCard(p) {
   };
 }
 
+function normalizeMessagesForHistory(messages) {
+  if (!Array.isArray(messages)) return [];
+  return messages
+    .filter((m) => m && (m.role === 'user' || m.role === 'assistant'))
+    .map((m) => ({
+      role: m.role,
+      content: String(m.content || '').slice(0, 8000),
+    }))
+    .filter((m) => m.content.trim().length > 0)
+    .slice(-CHAT_HISTORY_LIMIT);
+}
+
+router.get('/history', async (req, res) => {
+  try {
+    const clientSessionId = String(req.query.clientSessionId || '').trim();
+    if (!clientSessionId) return res.json({ messages: [] });
+    const row = await ChatConversation.findOne({
+      where: { sessionKey: clientSessionId },
+      attributes: ['messages', 'updatedAt'],
+    });
+    if (!row) return res.json({ messages: [] });
+    return res.json({
+      messages: normalizeMessagesForHistory(row.messages),
+      updatedAt: row.updatedAt,
+    });
+  } catch (e) {
+    console.error('chat /history:', e.message);
+    return res.status(500).json({ error: 'Не удалось получить историю чата' });
+  }
+});
+
 router.post(
   '/consult',
   consultLimiter,
@@ -480,6 +550,7 @@ router.post(
     body('messages.*.content').isString().isLength({ min: 1, max: 8000 }),
     body('productId').optional().isInt({ min: 1 }),
     body('categoryId').optional().isInt({ min: 1 }),
+    body('clientSessionId').optional().isString().isLength({ min: 6, max: 120 }),
   ],
   async (req, res) => {
     try {
@@ -488,7 +559,7 @@ router.post(
         return res.status(400).json({ error: 'Некорректные данные', details: errors.array() });
       }
 
-      const { messages, productId, categoryId } = req.body;
+      const { messages, productId, categoryId, clientSessionId } = req.body;
       const lastUser = [...messages].reverse().find((m) => m.role === 'user');
       const lastUserText = lastUser ? lastUser.content : '';
       const userQueryForLabels = messages
@@ -535,11 +606,27 @@ ${catalogBlock}`;
         systemPrompt,
       });
 
-      res.json({
+      const responsePayload = {
         message: text,
         model,
         products: products.length ? products.map(mapProductCard) : undefined,
-      });
+      };
+
+      if (clientSessionId) {
+        const history = normalizeMessagesForHistory([
+          ...messages,
+          { role: 'assistant', content: text },
+        ]);
+        await ChatConversation.upsert({
+          sessionKey: String(clientSessionId).trim(),
+          messages: history,
+          productId: productId || null,
+          categoryId: categoryId || null,
+          lastModel: model || null,
+        });
+      }
+
+      res.json(responsePayload);
     } catch (e) {
       console.error('chat /consult:', e.message);
       const code = e.statusCode || 500;

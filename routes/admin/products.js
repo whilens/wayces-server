@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { Op } = require('sequelize');
+const multer = require('multer');
+const { parse: parseCsv } = require('csv-parse/sync');
 const { authenticateAdmin } = require('../../middleware/authMiddleware');
 const upload = require('../../middleware/upload');
 const { processProductImage } = require('../../utils/imageProcessor');
@@ -35,6 +37,62 @@ const generateSlug = (name) => {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
 };
+
+const csvUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const byName = /\.csv$/i.test(file.originalname || '');
+    const byMime = [
+      'text/csv',
+      'application/csv',
+      'application/vnd.ms-excel',
+      'text/plain',
+    ].includes(file.mimetype);
+    if (byName || byMime) return cb(null, true);
+    return cb(new Error('Разрешён только CSV файл'));
+  },
+});
+
+function parseBool(v, fallback = false) {
+  if (v === undefined || v === null || v === '') return fallback;
+  const s = String(v).trim().toLowerCase();
+  return ['1', 'true', 'yes', 'y', 'да'].includes(s);
+}
+
+function parseNum(v, fallback = 0) {
+  if (v === undefined || v === null || String(v).trim() === '') return fallback;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function parseIntSafe(v, fallback = 0) {
+  if (v === undefined || v === null || String(v).trim() === '') return fallback;
+  const n = parseInt(String(v), 10);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function parseJsonObject(value, fallback = {}) {
+  if (value == null || String(value).trim() === '') return fallback;
+  const parsed = JSON.parse(String(value));
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return fallback;
+  return parsed;
+}
+
+async function createUniqueSlug(name, transaction, productIdToExclude = null) {
+  const base = generateSlug(name || 'product');
+  let slug = base || 'product';
+  let counter = 1;
+
+  while (true) {
+    const where = { slug };
+    if (productIdToExclude) where.id = { [Op.ne]: productIdToExclude };
+    const exists = await Product.findOne({ where, transaction });
+    if (!exists) return slug;
+    slug = `${base}-${counter}`;
+    counter += 1;
+  }
+}
 
 // GET /api/admin/products - Получить все товары для админа (с поиском и фильтрацией)
 router.get('/', authenticateAdmin, async (req, res) => {
@@ -89,7 +147,7 @@ router.get('/', authenticateAdmin, async (req, res) => {
 });
 
 // GET /api/admin/products/:id - Получить товар по ID для редактирования
-router.get('/:id', authenticateAdmin, async (req, res) => {
+router.get('/:id(\\d+)', authenticateAdmin, async (req, res) => {
   try {
     const productId = parseInt(req.params.id);
 
@@ -173,6 +231,385 @@ router.get('/:id', authenticateAdmin, async (req, res) => {
   } catch (error) {
     console.error('Ошибка получения товара:', error);
     res.status(500).json({ error: 'Ошибка получения товара', message: error.message });
+  }
+});
+
+// GET /api/admin/products/import/csv-template - Скачать шаблон CSV импорта
+router.get('/import/csv-template', authenticateAdmin, async (req, res) => {
+  try {
+    const templatePath = path.join(__dirname, '../../templates/products-import-template.csv');
+    if (!fs.existsSync(templatePath)) {
+      return res.status(404).json({ error: 'Шаблон CSV не найден' });
+    }
+    return res.download(templatePath, 'products-import-template.csv');
+  } catch (error) {
+    console.error('Ошибка получения шаблона CSV:', error);
+    return res.status(500).json({ error: 'Ошибка получения шаблона CSV', message: error.message });
+  }
+});
+
+// POST /api/admin/products/import/csv - Массовый импорт товаров из CSV
+router.post('/import/csv', authenticateAdmin, csvUpload.single('file'), async (req, res) => {
+  const transaction = await sequelize.transaction();
+  try {
+    if (!req.file?.buffer) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'CSV файл не передан (поле file)' });
+    }
+
+    const content = req.file.buffer.toString('utf8').replace(/^\uFEFF/, '');
+    const rows = parseCsv(content, {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+      bom: true,
+      delimiter: [',', ';'],
+      relax_quotes: true,
+      relax_column_count: true,
+    });
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'CSV пустой' });
+    }
+
+    const grouped = new Map();
+    rows.forEach((row, i) => {
+      const extId = String(row.product_external_id || '').trim();
+      if (!extId) {
+        throw new Error(`Строка ${i + 2}: не заполнен product_external_id`);
+      }
+      if (!grouped.has(extId)) {
+        grouped.set(extId, { product: null, variants: [], combinations: [] });
+      }
+      const bucket = grouped.get(extId);
+      const rowType = String(row.row_type || '').trim().toLowerCase();
+      if (rowType === 'product') {
+        bucket.product = row;
+      } else if (rowType === 'variant') {
+        bucket.variants.push(row);
+      } else if (rowType === 'combination') {
+        bucket.combinations.push(row);
+      } else {
+        throw new Error(
+          `Строка ${i + 2}: row_type должен быть product, variant или combination`
+        );
+      }
+    });
+
+    let createdProducts = 0;
+    let createdVariants = 0;
+    let createdOptions = 0;
+    let createdCombinations = 0;
+
+    for (const [externalId, bucket] of grouped.entries()) {
+      if (!bucket.product) {
+        throw new Error(`Для product_external_id="${externalId}" отсутствует строка row_type=product`);
+      }
+
+      const p = bucket.product;
+      const name = String(p.name || '').trim();
+      if (!name) {
+        throw new Error(`Товар "${externalId}": поле name обязательно`);
+      }
+
+      const basePrice = parseNum(p.base_price, NaN);
+      if (!Number.isFinite(basePrice) || basePrice <= 0) {
+        throw new Error(`Товар "${externalId}": поле base_price должно быть > 0`);
+      }
+
+      const categoryIdRaw = parseIntSafe(p.category_id, 0);
+      const categoryId = categoryIdRaw > 0 ? categoryIdRaw : null;
+      if (categoryId) {
+        const category = await Category.findByPk(categoryId, { transaction });
+        if (!category) {
+          throw new Error(`Товар "${externalId}": категория category_id=${categoryId} не найдена`);
+        }
+      }
+
+      let specs = null;
+      try {
+        specs = parseJsonObject(p.specifications_json, {});
+      } catch (e) {
+        throw new Error(`Товар "${externalId}": specifications_json невалидный JSON`);
+      }
+
+      const slug = await createUniqueSlug(name, transaction);
+      const product = await Product.create(
+        {
+          name,
+          slug,
+          basePrice,
+          categoryId,
+          description: String(p.description || '').trim() || null,
+          specifications: specs,
+          isActive: parseBool(p.is_active, true),
+          discountType:
+            p.discount_type === 'percentage' || p.discount_type === 'fixed'
+              ? p.discount_type
+              : null,
+          discountValue: parseNum(p.discount_value, 0),
+        },
+        { transaction }
+      );
+      createdProducts += 1;
+
+      const variantMap = new Map();
+      const optionMapByVariant = new Map();
+      for (const vRow of bucket.variants) {
+        const variantKey = String(vRow.variant_key || '').trim();
+        const optionKey = String(vRow.option_key || '').trim();
+        if (!variantKey || !optionKey) {
+          throw new Error(
+            `Товар "${externalId}": у строки variant обязательны variant_key и option_key`
+          );
+        }
+
+        let variant = variantMap.get(variantKey);
+        if (!variant) {
+          const variantType = String(vRow.variant_type || 'button').trim().toLowerCase();
+          if (!['color', 'button', 'select'].includes(variantType)) {
+            throw new Error(
+              `Товар "${externalId}": variant_type="${variantType}" недопустим для variant_key="${variantKey}"`
+            );
+          }
+          variant = await ProductVariant.create(
+            {
+              productId: product.id,
+              variantKey,
+              variantName: String(vRow.variant_name || variantKey).trim(),
+              variantType,
+              displayOrder: parseIntSafe(vRow.variant_display_order, 0),
+              isRequired: parseBool(vRow.variant_is_required, true),
+            },
+            { transaction }
+          );
+          variantMap.set(variantKey, variant);
+          optionMapByVariant.set(variantKey, new Map());
+          createdVariants += 1;
+        }
+
+        const existingOption = optionMapByVariant.get(variantKey).get(optionKey);
+        if (existingOption) continue;
+
+        const option = await ProductVariantOption.create(
+          {
+            variantId: variant.id,
+            optionKey,
+            optionValue: String(vRow.option_value || optionKey).trim(),
+            colorCode: String(vRow.color_code || '').trim() || null,
+            priceModifier: parseNum(vRow.price_modifier, 0),
+            images: null,
+            isDefault: parseBool(vRow.option_is_default, false),
+            isAvailable: parseBool(vRow.option_is_available, true),
+            stockQuantity: parseIntSafe(vRow.option_stock_quantity, 0),
+            displayOrder: parseIntSafe(vRow.option_display_order, 0),
+          },
+          { transaction }
+        );
+        optionMapByVariant.get(variantKey).set(optionKey, option);
+        createdOptions += 1;
+      }
+
+      const hasExplicitCombinations =
+        Array.isArray(bucket.combinations) && bucket.combinations.length > 0;
+
+      if (hasExplicitCombinations) {
+        const seen = new Set();
+        let validCombinationRows = 0;
+        for (const cRow of bucket.combinations) {
+          const rawVariantsJson = String(cRow.combination_variants_json || '').trim();
+          if (!rawVariantsJson) {
+            continue;
+          }
+
+          let variantsObj;
+          try {
+            variantsObj = parseJsonObject(rawVariantsJson, null);
+          } catch {
+            throw new Error(
+              `Товар "${externalId}": combination_variants_json невалидный JSON`
+            );
+          }
+          if (!variantsObj || Object.keys(variantsObj).length === 0) {
+            continue;
+          }
+
+          const combinationKey = Object.keys(variantsObj)
+            .sort()
+            .map((k) => `${k}-${variantsObj[k]}`)
+            .join('_');
+          if (!combinationKey || seen.has(combinationKey)) continue;
+          seen.add(combinationKey);
+          validCombinationRows += 1;
+
+          let sku = String(cRow.combination_sku || '').trim() || null;
+          if (!sku && product.categoryId) {
+            sku = await generateNextSku(product.categoryId, transaction);
+          }
+
+          const combination = await ProductCombination.create(
+            {
+              productId: product.id,
+              combinationKey,
+              price: parseNum(cRow.combination_price, basePrice),
+              stockQuantity: parseIntSafe(cRow.combination_stock_quantity, 0),
+              sku,
+              isActive: parseBool(cRow.combination_is_active, true),
+            },
+            { transaction }
+          );
+
+          for (const [variantKey, optionKey] of Object.entries(variantsObj)) {
+            const option = optionMapByVariant.get(variantKey)?.get(String(optionKey));
+            if (!option) {
+              throw new Error(
+                `Товар "${externalId}": в combination не найдена опция "${variantKey}:${optionKey}"`
+              );
+            }
+            await ProductCombinationOption.create(
+              {
+                combinationId: combination.id,
+                optionId: option.id,
+              },
+              { transaction }
+            );
+          }
+          createdCombinations += 1;
+        }
+        if (validCombinationRows === 0 && variantMap.size > 0) {
+          const variantList = [...variantMap.values()].map((v) => ({
+            key: v.variantKey,
+            options: [...(optionMapByVariant.get(v.variantKey)?.values() || [])].filter(
+              (o) => o.isAvailable !== false
+            ),
+          }));
+
+          const buildRows = (arr, idx = 0, current = {}) => {
+            if (idx === arr.length) return [{ ...current }];
+            const res = [];
+            for (const opt of arr[idx].options) {
+              res.push(
+                ...buildRows(arr, idx + 1, {
+                  ...current,
+                  [arr[idx].key]: opt.optionKey,
+                })
+              );
+            }
+            return res;
+          };
+
+          const generated = buildRows(variantList);
+          for (const comboObj of generated) {
+            const combinationKey = Object.keys(comboObj)
+              .sort()
+              .map((k) => `${k}-${comboObj[k]}`)
+              .join('_');
+            let comboPrice = basePrice;
+            for (const [vk, ok] of Object.entries(comboObj)) {
+              const opt = optionMapByVariant.get(vk)?.get(String(ok));
+              comboPrice += parseNum(opt?.priceModifier, 0);
+            }
+            const combination = await ProductCombination.create(
+              {
+                productId: product.id,
+                combinationKey,
+                price: comboPrice,
+                stockQuantity: 0,
+                isActive: true,
+              },
+              { transaction }
+            );
+            for (const [vk, ok] of Object.entries(comboObj)) {
+              const opt = optionMapByVariant.get(vk)?.get(String(ok));
+              if (!opt) continue;
+              await ProductCombinationOption.create(
+                {
+                  combinationId: combination.id,
+                  optionId: opt.id,
+                },
+                { transaction }
+              );
+            }
+            createdCombinations += 1;
+          }
+        }
+      } else if (variantMap.size > 0) {
+        const variantList = [...variantMap.values()].map((v) => ({
+          key: v.variantKey,
+          options: [...(optionMapByVariant.get(v.variantKey)?.values() || [])].filter(
+            (o) => o.isAvailable !== false
+          ),
+        }));
+
+        const buildRows = (arr, idx = 0, current = {}) => {
+          if (idx === arr.length) return [{ ...current }];
+          const res = [];
+          for (const opt of arr[idx].options) {
+            res.push(
+              ...buildRows(arr, idx + 1, {
+                ...current,
+                [arr[idx].key]: opt.optionKey,
+              })
+            );
+          }
+          return res;
+        };
+
+        const generated = buildRows(variantList);
+        for (const comboObj of generated) {
+          const combinationKey = Object.keys(comboObj)
+            .sort()
+            .map((k) => `${k}-${comboObj[k]}`)
+            .join('_');
+          let comboPrice = basePrice;
+          for (const [vk, ok] of Object.entries(comboObj)) {
+            const opt = optionMapByVariant.get(vk)?.get(String(ok));
+            comboPrice += parseNum(opt?.priceModifier, 0);
+          }
+          const combination = await ProductCombination.create(
+            {
+              productId: product.id,
+              combinationKey,
+              price: comboPrice,
+              stockQuantity: 0,
+              isActive: true,
+            },
+            { transaction }
+          );
+          for (const [vk, ok] of Object.entries(comboObj)) {
+            const opt = optionMapByVariant.get(vk)?.get(String(ok));
+            if (!opt) continue;
+            await ProductCombinationOption.create(
+              {
+                combinationId: combination.id,
+                optionId: opt.id,
+              },
+              { transaction }
+            );
+          }
+          createdCombinations += 1;
+        }
+      }
+    }
+
+    await transaction.commit();
+    return res.status(201).json({
+      message: 'Импорт CSV успешно завершён',
+      stats: {
+        products: createdProducts,
+        variants: createdVariants,
+        options: createdOptions,
+        combinations: createdCombinations,
+      },
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error('Ошибка импорта CSV:', error);
+    return res.status(400).json({
+      error: 'Ошибка импорта CSV',
+      message: error.message,
+    });
   }
 });
 
@@ -516,7 +953,7 @@ router.post('/', authenticateAdmin, upload.any(), async (req, res) => {
 
 // PUT /api/admin/products/:id - Обновить товар
 // Используем any() для обработки всех файлов, затем разделяем их
-router.put('/:id', authenticateAdmin, upload.any(), async (req, res) => {
+router.put('/:id(\\d+)', authenticateAdmin, upload.any(), async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
     const productId = parseInt(req.params.id);
@@ -1013,7 +1450,7 @@ router.put('/:id', authenticateAdmin, upload.any(), async (req, res) => {
 });
 
 // DELETE /api/admin/products/:id - Удалить товар
-router.delete('/:id', authenticateAdmin, async (req, res) => {
+router.delete('/:id(\\d+)', authenticateAdmin, async (req, res) => {
   try {
     const productId = parseInt(req.params.id);
 
