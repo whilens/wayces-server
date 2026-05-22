@@ -1,7 +1,6 @@
 /**
  * Централизованная конфигурация категорий
- * Загружает конфигурации для всех категорий
- * Приоритет: сначала БД, потом файлы
+ * Конфиг из файлов (shoes.js и др.) объединяется с настройками категории в БД
  */
 
 /** Генерация ключа опции из ключа варианта и значения: size + "38" → "size-38" */
@@ -48,10 +47,6 @@ async function loadCategoryConfigFromDB(categoryId) {
       order: [['displayOrder', 'ASC']],
     });
     
-    if (specifications.length === 0 && variants.length === 0) {
-      return null;
-    }
-    
     return {
       specifications: specifications.map(spec => ({
         key: spec.specKey,
@@ -79,67 +74,114 @@ async function loadCategoryConfigFromDB(categoryId) {
     };
   } catch (error) {
     console.error('Ошибка загрузки конфигурации из БД:', error);
-    return null;
+    return { specifications: [], variants: [] };
   }
 }
 
+function getFileConfigForSlug(slug) {
+  if (!slug) return null;
+  return categoryConfigs[String(slug).toLowerCase()] || null;
+}
+
+function mergeOptions(fileOptions = [], dbOptions = []) {
+  const byKey = new Map();
+  for (const opt of fileOptions) {
+    if (opt?.key) byKey.set(opt.key, { ...opt });
+  }
+  for (const opt of dbOptions) {
+    if (opt?.key) byKey.set(opt.key, { ...(byKey.get(opt.key) || {}), ...opt });
+  }
+  return Array.from(byKey.values());
+}
+
+function mergeSpecifications(fileSpecs = [], dbSpecs = []) {
+  const byKey = new Map();
+  for (const spec of fileSpecs) {
+    if (spec?.key) byKey.set(spec.key, { ...spec });
+  }
+  for (const spec of dbSpecs) {
+    if (!spec?.key) continue;
+    const prev = byKey.get(spec.key);
+    byKey.set(spec.key, {
+      ...(prev || {}),
+      ...spec,
+      options: spec.options ?? prev?.options ?? null,
+    });
+  }
+  return Array.from(byKey.values());
+}
+
+function mergeVariants(fileVariants = [], dbVariants = []) {
+  const byKey = new Map();
+  for (const variant of fileVariants) {
+    if (variant?.key) {
+      byKey.set(variant.key, {
+        ...variant,
+        options: [...(variant.options || [])],
+      });
+    }
+  }
+  for (const variant of dbVariants) {
+    if (!variant?.key) continue;
+    const prev = byKey.get(variant.key);
+    byKey.set(variant.key, {
+      ...(prev || {}),
+      ...variant,
+      name: variant.name || prev?.name,
+      type: variant.type || prev?.type,
+      isRequired: variant.isRequired ?? prev?.isRequired,
+      unit: variant.unit ?? prev?.unit,
+      options: mergeOptions(prev?.options, variant.options),
+    });
+  }
+  return Array.from(byKey.values());
+}
+
+function mergeCategoryConfigs(fileConfig, dbConfig) {
+  const file = fileConfig || { specifications: [], variants: [] };
+  const db = dbConfig || { specifications: [], variants: [] };
+  return {
+    specifications: mergeSpecifications(file.specifications, db.specifications),
+    variants: mergeVariants(file.variants, db.variants),
+  };
+}
+
+function isConfigEmpty(config) {
+  if (!config) return true;
+  return (config.specifications?.length || 0) === 0 && (config.variants?.length || 0) === 0;
+}
+
 /**
- * Получить конфигурацию категории по slug или ID
- * Приоритет: сначала БД, потом файлы
- * @param {string|number} categoryIdentifier - slug или ID категории
- * @param {Object} categoryData - данные категории (для наследования от родителя)
- * @param {boolean} useDB - использовать БД (по умолчанию true)
- * @returns {Promise<Object>} конфигурация категории
+ * Получить конфигурацию категории по slug или ID (файл + БД)
  */
 async function getCategoryConfig(categoryIdentifier, categoryData = null, useDB = true) {
   let categoryId = null;
-  let slug = null;
-  
-  // Определяем categoryId и slug
+
   if (categoryData) {
     categoryId = categoryData.id;
-    slug = categoryData.slug;
   } else if (typeof categoryIdentifier === 'number') {
     categoryId = categoryIdentifier;
-  } else if (typeof categoryIdentifier === 'string') {
-    slug = categoryIdentifier;
   }
-  
-  // Сначала пытаемся загрузить из БД
-  if (useDB && categoryId) {
-    const dbConfig = await loadCategoryConfigFromDB(categoryId);
-    if (dbConfig) {
-      return dbConfig;
-    }
-    
-    // Если в БД нет, но есть родитель - пробуем наследовать от родителя
-    if (categoryData?.parentId && categoryData?.parent) {
-      const parentConfig = await getCategoryConfig(categoryData.parent.id, categoryData.parent, useDB);
-      if (parentConfig) {
-        return parentConfig;
-      }
+
+  const fileConfig = categoryData?.slug ? getFileConfigForSlug(categoryData.slug) : null;
+  const dbConfig =
+    useDB && categoryId ? await loadCategoryConfigFromDB(categoryId) : { specifications: [], variants: [] };
+
+  let merged = mergeCategoryConfigs(fileConfig, dbConfig);
+
+  if (isConfigEmpty(merged) && categoryData?.parentId && categoryData?.parent) {
+    const parentConfig = await getCategoryConfig(categoryData.parent.id, categoryData.parent, useDB);
+    if (parentConfig && !isConfigEmpty(parentConfig)) {
+      return parentConfig;
     }
   }
-  
-  // Fallback: загружаем из файлов
-  if (categoryData && categoryData.slug) {
-    const config = categoryConfigs[categoryData.slug.toLowerCase()];
-    if (config) {
-      return config;
-    }
-    
-    // Если конфигурации нет, но есть родитель - наследуем от родителя
-    if (categoryData.parentId && categoryData.parent) {
-      return await getCategoryConfig(categoryData.parent.slug, categoryData.parent, false);
-    }
+
+  if (isConfigEmpty(merged) && typeof categoryIdentifier === 'string') {
+    const slugOnly = getFileConfigForSlug(categoryIdentifier);
+    if (slugOnly) return slugOnly;
   }
-  
-  // Если передан slug напрямую
-  if (typeof categoryIdentifier === 'string') {
-    return categoryConfigs[categoryIdentifier.toLowerCase()] || null;
-  }
-  
-  return null;
+
+  return isConfigEmpty(merged) ? null : merged;
 }
 
 /**
