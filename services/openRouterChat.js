@@ -27,7 +27,10 @@ async function completeChat({ messages, systemPrompt }) {
   const body = {
     model,
     messages: [{ role: 'system', content: systemPrompt }, ...messages],
-    temperature: Number(process.env.OPENROUTER_TEMPERATURE) || 0.55,
+    temperature: (() => {
+      const t = Number(process.env.OPENROUTER_TEMPERATURE);
+      return Number.isFinite(t) ? t : 0.4;
+    })(),
     max_tokens: Math.min(Number(process.env.OPENROUTER_MAX_TOKENS) || 900, 4096),
   };
 

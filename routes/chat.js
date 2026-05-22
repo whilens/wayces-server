@@ -13,6 +13,13 @@ const {
   ChatConversation,
 } = require('../models');
 const { completeChat } = require('../services/openRouterChat');
+const {
+  parseConsultIntent,
+  rankAndFilterProducts,
+  filterCombinationsByIntent,
+  intentSummaryForPrompt,
+  pickLinkCombination,
+} = require('../services/chatIntent');
 
 const router = express.Router();
 
@@ -165,8 +172,12 @@ function naturalLineFromCombinationKey(combinationKey) {
 }
 
 /** Комбинации — источник истины по остаткам и цене, если склад ведётся в product_combinations */
-function combinationsForPrompt(p) {
-  const combs = (p.combinations || []).filter((c) => c.isActive !== false);
+function combinationsForPrompt(p, intent) {
+  let combs = (p.combinations || []).filter((c) => c.isActive !== false);
+  if (intent) {
+    const filtered = filterCombinationsByIntent(combs, intent);
+    if (filtered.length) combs = filtered;
+  }
   if (!combs.length) return '';
   const maxLines = 28;
   const lines = [];
@@ -285,9 +296,35 @@ const productIncludeForChat = [
   },
 ];
 
+function buildSystemPrompt(catalogBlock, intent) {
+  const intentBlock = intentSummaryForPrompt(intent);
+  const intentSection = intentBlock ? `\n${intentBlock}\n` : '';
+
+  return `Ты вежливый консультант интернет-магазина обуви и аксессуаров. Помогаешь с выбором и отвечаешь только по данным каталога ниже.
+
+Распознавание запроса:
+- Синонимы брендов: adidas/адидас/адidas, nike/найк, demix/демикс, puma/пума, reebok/рибок, new balance/нью баланс, asics/асикс, skechers, vans, converse и т.д. — сопоставляй с названием товара в каталоге.
+- Тип обуви: кроссовки ≈ кеды, sneakers; ботинки, сапоги, туфли, сандалии — не путай с другим типом, если пользователь уточнил.
+- Размер: числа 35–52, «42-й», «р.42», «размер 42», «на 42» — это один и тот же размер EU.
+- Цвет: чёрный/черный/black, белый/white и др. — учитывай при ответе о комплектации.
+
+Правила ответа:
+- Опирайся только на контекст каталога (JSON-характеристики, блок «комбинации» с остатком и ценой по SKU, блок «опции»). Если есть «комбинации», наличие и цену бери только оттуда. Не выдумывай цены, артикулы и остатки.
+- Если пользователь назвал бренд, размер или цвет — отвечай только по подходящим товарам и комплектациям из контекста. Не упоминай другие бренды и не перечисляй все размеры подряд, если спросили конкретный размер.
+- Перед ответом «нет в наличии» проверь блок «комбинации» по запрошенному размеру/бренду. Не противоречь себе в соседних репликах: если в каталоге есть размер 42 у нужного бренда — не пиши, что размера 42 нет вообще.
+- Нет подходящего товара — честно скажи и предложи уточнить (другой размер, цвет, бренд) или каталог на сайте.
+- Не оформляй заказы, не списывай деньги, не запрашивай платёжные данные.
+- Русский язык, грамотно («у меня», не «у мне»), 2–5 предложений, без лишней воды.
+- Не вставляй полные URL — карточки товаров показываются в чате отдельно.
+- В тексте называй конкретную модель из каталога (как в названии), цену и остаток по нужной комплектации из «комбинаций».
+${intentSection}
+${catalogBlock}`;
+}
+
 async function loadCatalogContext({ productId, categoryId, lastUserText, userQueryForLabels }) {
   const uq = (userQueryForLabels || lastUserText || '').trim();
-  const out = { block: '', products: [] };
+  const intent = parseConsultIntent(uq);
+  const out = { block: '', products: [], intent };
 
   if (productId) {
     const id = parseInt(String(productId), 10);
@@ -328,15 +365,47 @@ async function loadCatalogContext({ productId, categoryId, lastUserText, userQue
     if (hasCategory) {
       where.categoryId = cidRaw;
     }
+    const andClauses = [];
+
+    if (intent.brandAliases.length) {
+      andClauses.push({
+        [Op.or]: intent.brandAliases.map((alias) => ({
+          name: { [Op.iLike]: `%${alias.slice(0, 60).replace(/%/g, '')}%` },
+        })),
+      });
+    }
+
+    const typeNeedles = [];
+    for (const type of intent.productTypes) {
+      const aliases =
+        type === 'sneakers'
+          ? ['кроссовк', 'кед']
+          : type === 'boots'
+            ? ['ботинк', 'сапог']
+            : type === 'sandals'
+              ? ['сандал', 'шлеп']
+              : ['туфл', 'лофер'];
+      typeNeedles.push(...aliases);
+    }
+    if (typeNeedles.length) {
+      andClauses.push({
+        [Op.or]: [...new Set(typeNeedles)].map((w) => ({
+          name: { [Op.iLike]: `%${w}%` },
+        })),
+      });
+    }
+
     if (q.length >= 2) {
-      const safe = q.slice(0, 120).replace(/%/g, '');
-      const normalized = safe
-        .replace(/[?!.,;:«»""''—–\-]+/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-      const words = normalized.split(/\s+/).filter((w) => w.length >= 3);
-      const needles =
-        words.length > 0 ? words : normalized.length >= 2 ? [normalized] : [];
+      const needles = intent.searchWords.length
+        ? intent.searchWords
+        : q
+            .slice(0, 120)
+            .replace(/%/g, '')
+            .replace(/[?!.,;:«»""''—–\-]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .split(/\s+/)
+            .filter((w) => w.length >= 3);
 
       const orForWord = (word) => {
         const w = word.slice(0, 80);
@@ -355,10 +424,16 @@ async function loadCatalogContext({ productId, categoryId, lastUserText, userQue
 
       if (needles.length === 1) {
         const clause = orForWord(needles[0]);
-        if (clause.length) where[Op.or] = clause;
+        if (clause.length) andClauses.push({ [Op.or]: clause });
       } else if (needles.length > 1) {
-        where[Op.or] = needles.flatMap(orForWord);
+        andClauses.push({
+          [Op.or]: needles.flatMap(orForWord),
+        });
       }
+    }
+
+    if (andClauses.length) {
+      where[Op.and] = andClauses;
     }
 
     const rows = await Product.findAll({
@@ -376,7 +451,7 @@ async function loadCatalogContext({ productId, categoryId, lastUserText, userQue
         'categoryId',
         'defaultImage',
       ],
-      limit: 12,
+      limit: intent.brandAliases.length ? 16 : 20,
       order: [['createdAt', 'DESC']],
     });
     const ids = rows.map((r) => r.id);
@@ -400,6 +475,9 @@ async function loadCatalogContext({ productId, categoryId, lastUserText, userQue
         )
       );
       out.products = out.products.filter(Boolean);
+      if (out.products.length) {
+        out.products = rankAndFilterProducts(out.products, intent, 6);
+      }
     }
   }
 
@@ -413,7 +491,7 @@ async function loadCatalogContext({ productId, categoryId, lastUserText, userQue
     const cat = p.category?.name || '—';
     const spec = specsForPrompt(p.specifications);
     const vars = variantsForPrompt(p, uq);
-    const combs = combinationsForPrompt(p);
+    const combs = combinationsForPrompt(p, intent);
     return [
       `${i + 1}) id=${p.id}, название: ${p.name}`,
       `   категория: ${cat}; базовая цена: ${parseFloat(p.basePrice)} (валюта как в магазине)`,
@@ -430,24 +508,10 @@ async function loadCatalogContext({ productId, categoryId, lastUserText, userQue
   return out;
 }
 
-/** Ссылка на карточку с предвыбранной комплектацией (как в каталоге: сначала с остатком, затем мин. цена) */
-function pickChatProductLink(p) {
-  const combs = (p.combinations || []).filter((c) => c.isActive !== false);
-  if (!combs.length) return {};
-  const inStock = combs.filter((c) => (c.stockQuantity ?? 0) > 0);
-  const pool = inStock.length ? inStock : combs;
-  let best = pool[0];
-  let minPrice = parseFloat(best.price);
-  if (Number.isNaN(minPrice)) minPrice = Infinity;
-  for (let i = 1; i < pool.length; i++) {
-    const c = pool[i];
-    const pr = parseFloat(c.price);
-    const priceVal = Number.isNaN(pr) ? Infinity : pr;
-    if (priceVal < minPrice) {
-      minPrice = priceVal;
-      best = c;
-    }
-  }
+/** Ссылка на карточку с предвыбранной комплектацией (учёт размера/цвета из запроса) */
+function pickChatProductLink(p, intent) {
+  const best = pickLinkCombination(p, intent || { sizes: [], colors: [], brands: [] });
+  if (!best) return {};
   return {
     linkCombinationId: best.id,
     linkCombinationKey: best.combinationKey || null,
@@ -458,8 +522,11 @@ const CHAT_COMBINATIONS_LIMIT = 32;
 const CHAT_HISTORY_LIMIT = 40;
 
 /** Комплектации для клиента (чат, подборка): цена, остаток, подпись, ссылка по combinationId */
-function mapCombinationsForClient(p) {
-  const raw = (p.combinations || []).filter((c) => c.isActive !== false);
+function mapCombinationsForClient(p, intent) {
+  let raw = (p.combinations || []).filter((c) => c.isActive !== false);
+  if (intent && (intent.sizes?.length || intent.colors?.length)) {
+    raw = filterCombinationsByIntent(raw, intent);
+  }
   if (!raw.length) return [];
   const sorted = [...raw].sort(
     (a, b) => parseFloat(a.price ?? 0) - parseFloat(b.price ?? 0)
@@ -494,9 +561,9 @@ function mapCombinationsForClient(p) {
   return out;
 }
 
-function mapProductCard(p) {
-  const link = pickChatProductLink(p);
-  const combinations = mapCombinationsForClient(p);
+function mapProductCard(p, intent) {
+  const link = pickChatProductLink(p, intent);
+  const combinations = mapCombinationsForClient(p, intent);
   return {
     id: p.id,
     name: p.name,
@@ -569,7 +636,7 @@ router.post(
         .join(' ')
         .slice(0, 1500);
 
-      const { block: catalogBlock, products } = await loadCatalogContext({
+      const { block: catalogBlock, products, intent } = await loadCatalogContext({
         productId,
         categoryId,
         lastUserText,
@@ -581,20 +648,15 @@ router.post(
           ? products.map((p) => `id=${p.id} "${p.name}"`).join(' | ')
           : '—';
         const preview = truncate(lastUserText.replace(/\s+/g, ' '), 120);
+        const intentHint = intent
+          ? ` intent={brands:${intent.brands.join('|')||'—'} sizes:${intent.sizes.join('|')||'—'}}`
+          : '';
         console.log(
-          `[chat/consult] productId=${productId ?? '—'} categoryId=${categoryId ?? '—'} · последнее: "${preview}" · товаров в контексте: ${products.length} → ${list}`
+          `[chat/consult] productId=${productId ?? '—'} categoryId=${categoryId ?? '—'} · последнее: "${preview}"${intentHint} · товаров: ${products.length} → ${list}`
         );
       }
 
-      const systemPrompt = `Ты вежливый консультант интернет-магазина. Помогаешь с выбором товара и отвечаешь на вопросы о товарах из контекста ниже.
-Правила:
-- Опирайся только на переданный контекст каталога (характеристики JSON, блок «комбинации» с остатками и ценами по SKU, блок «опции» — размер, цвет и т.д.). Если есть «комбинации», наличие и цену по конкретной комплектации бери только оттуда. Не придумывай цены, артикулы и наличие.
-- Если данных не хватает, так и скажи и предложи уточнить или посмотреть карточку товара на сайте.
-- Не оформляй заказы, не списывай деньги, не запрашивай банковские данные. Ты только консультант.
-- Отвечай по-русски, кратко и по делу, 2–6 предложений, если пользователь не просит иначе.
-- Не перечисляй в ответе полные URL сайта — подборка товаров показывается в интерфейсе чата отдельно.
-
-${catalogBlock}`;
+      const systemPrompt = buildSystemPrompt(catalogBlock, intent);
 
       const convo = messages.slice(-14).map((m) => ({
         role: m.role,
@@ -609,7 +671,7 @@ ${catalogBlock}`;
       const responsePayload = {
         message: text,
         model,
-        products: products.length ? products.map(mapProductCard) : undefined,
+        products: products.length ? products.map((p) => mapProductCard(p, intent)) : undefined,
       };
 
       if (clientSessionId) {
