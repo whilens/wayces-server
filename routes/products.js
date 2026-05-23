@@ -13,6 +13,7 @@ const {
   generateCombinationKey,
   calculatePriceWithModifiers 
 } = require('../utils/productHelpers');
+const catalogCache = require('../services/catalogCache');
 
 /**
  * Рекурсивно получить все ID дочерних категорий для заданной категории
@@ -39,10 +40,19 @@ async function getAllChildCategoryIds(parentCategoryId) {
 // GET /api/products/categories - Получить все категории (должен быть ПЕРЕД /:id)
 router.get('/categories', async (req, res) => {
   try {
+    const cached = await catalogCache.getCategories();
+    if (cached) {
+      res.set('X-Cache', 'HIT');
+      return res.json(cached);
+    }
+
     const categories = await Category.findAll({
       order: [['displayOrder', 'ASC'], ['name', 'ASC']],
     });
-    res.json(categories);
+    const plainCategories = categories.map((c) => c.get({ plain: true }));
+    await catalogCache.setCategories(plainCategories);
+    res.set('X-Cache', 'MISS');
+    res.json(plainCategories);
   } catch (error) {
     console.error('Ошибка получения категорий:', error);
     res.status(500).json({ error: 'Ошибка получения категорий', message: error.message });
@@ -52,6 +62,12 @@ router.get('/categories', async (req, res) => {
 // GET /api/products - Получить все товары с пагинацией и фильтрацией
 router.get('/', async (req, res) => {
   try {
+    const listCache = await catalogCache.getProductsList(req.query);
+    if (listCache.data) {
+      res.set('X-Cache', 'HIT');
+      return res.json(listCache.data);
+    }
+
     // Валидация параметров пагинации
     let page, limit, offset;
     try {
@@ -441,13 +457,20 @@ router.get('/', async (req, res) => {
     // Вычисляем, есть ли ещё товары для загрузки
     const hasMore = offset + paginatedProducts.length < total;
 
-    res.json({
+    const responsePayload = {
       products: paginatedProducts,
       total,
       page,
       limit,
       hasMore,
-    });
+    };
+
+    if (listCache.key) {
+      await catalogCache.setProductsList(req.query, responsePayload);
+      res.set('X-Cache', 'MISS');
+    }
+
+    res.json(responsePayload);
   } catch (error) {
     console.error('Ошибка получения товаров:', error);
     res.status(500).json({ error: 'Ошибка получения товаров', message: error.message });

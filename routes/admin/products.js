@@ -13,6 +13,7 @@ const {
   saveOptionImages,
   separateImageFiles,
 } = require('../../utils/productImageHandler');
+const catalogCache = require('../../services/catalogCache');
 const { safeParseJSON, safeParseJSONOrThrow } = require('../../utils/safeParse');
 const { safeParseInt } = require('../../utils/validation');
 const sequelize = require('../../config/sequelize');
@@ -594,6 +595,7 @@ router.post('/import/csv', authenticateAdmin, csvUpload.single('file'), async (r
     }
 
     await transaction.commit();
+    await catalogCache.invalidateCatalog();
     return res.status(201).json({
       message: 'Импорт CSV успешно завершён',
       stats: {
@@ -940,6 +942,7 @@ router.post('/', authenticateAdmin, upload.any(), async (req, res) => {
       ],
     });
 
+    await catalogCache.invalidateCatalog();
     res.status(201).json({
       message: 'Товар успешно создан',
       product: createdProduct,
@@ -1438,6 +1441,7 @@ router.put('/:id(\\d+)', authenticateAdmin, upload.any(), async (req, res) => {
       ],
     });
 
+    await catalogCache.invalidateCatalog();
     res.json({
       message: 'Товар успешно обновлен',
       product: updatedProduct,
@@ -1461,6 +1465,7 @@ router.delete('/:id(\\d+)', authenticateAdmin, async (req, res) => {
     }
 
     await product.destroy();
+    await catalogCache.invalidateCatalog();
 
     res.json({ message: 'Товар успешно удален' });
   } catch (error) {

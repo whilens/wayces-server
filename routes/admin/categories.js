@@ -3,6 +3,7 @@ const router = express.Router();
 const { authenticateAdmin } = require('../../middleware/authMiddleware');
 const { Category, CategorySpecification, CategoryVariant, Product } = require('../../models');
 const sequelize = require('../../config/sequelize');
+const catalogCache = require('../../services/catalogCache');
 
 // GET /api/admin/categories - Получить все категории
 router.get('/', authenticateAdmin, async (req, res) => {
@@ -72,6 +73,7 @@ router.post('/', authenticateAdmin, async (req, res) => {
       listCombinationsSeparately: listCombinationsSeparately === true || listCombinationsSeparately === 'true',
     });
 
+    await catalogCache.invalidateCatalog();
     res.status(201).json({
       message: 'Категория успешно создана',
       category,
@@ -112,6 +114,7 @@ router.put('/:id', authenticateAdmin, async (req, res) => {
     if (listCombinationsSeparately !== undefined) category.listCombinationsSeparately = listCombinationsSeparately === true || listCombinationsSeparately === 'true';
 
     await category.save();
+    await catalogCache.invalidateCatalog();
 
     res.json({
       message: 'Категория успешно обновлена',
@@ -160,6 +163,7 @@ router.delete('/:id', authenticateAdmin, async (req, res) => {
       throw txError;
     }
 
+    await catalogCache.invalidateCatalog();
     res.json({
       message: 'Категория успешно удалена',
       id,

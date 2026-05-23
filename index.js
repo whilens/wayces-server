@@ -11,6 +11,7 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const sequelize = require('./config/sequelize');
 const models = require('./models');
+const catalogCache = require('./services/catalogCache');
 
 const app = express();
 
@@ -139,6 +140,8 @@ const startServer = async () => {
     // Проверка подключения
     await sequelize.authenticate();
     console.log('✅ Подключение к БД успешно установлено');
+
+    await catalogCache.connect();
 
     // Синхронизация моделей с БД
     // В продакшене использовать миграции, а не alter: true
