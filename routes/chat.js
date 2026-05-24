@@ -24,11 +24,19 @@ const {
 const router = express.Router();
 
 const consultLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: Number(process.env.CHAT_RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
   max: Number(process.env.CHAT_RATE_LIMIT_MAX) || 40,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Слишком много запросов к консультанту. Попробуйте через несколько минут.' },
+  // Для k6: лимит по clientSessionId (каждый VU — своя сессия), иначе 20 VU с одного IP = 40 запросов на всех
+  keyGenerator: (req) => {
+    if (process.env.CHAT_RATE_LIMIT_BY_SESSION === 'true') {
+      const sid = req.body?.clientSessionId;
+      if (sid && String(sid).trim()) return `sess:${String(sid).trim().slice(0, 120)}`;
+    }
+    return req.ip;
+  },
 });
 
 function truncate(str, max) {

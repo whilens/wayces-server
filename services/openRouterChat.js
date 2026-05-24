@@ -11,6 +11,17 @@ function sleep(ms) {
  * @returns {Promise<{ text: string, model: string }>}
  */
 async function completeChat({ messages, systemPrompt }) {
+  if (process.env.CHAT_MOCK_RESPONSES === 'true') {
+    const delay = Number(process.env.CHAT_MOCK_DELAY_MS) || 300;
+    if (delay > 0) await sleep(delay);
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+    const hint = lastUser ? String(lastUser.content).slice(0, 80) : '';
+    return {
+      text: `Тестовый ответ консультанта (mock).${hint ? ` Запрос: «${hint}»` : ''}`,
+      model: 'mock',
+    };
+  }
+
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     const err = new Error('OPENROUTER_API_KEY не задан на сервере');
