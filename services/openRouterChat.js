@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { LOAD_TEST_CHAT_DELAY_MS } = require('../utils/loadTest');
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -6,25 +7,26 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function completeChatMock(messages, delayMs) {
+  const delay = Math.min(Math.max(delayMs, 0), 30000);
+  if (delay > 0) await sleep(delay);
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+  const hint = lastUser ? String(lastUser.content).slice(0, 120) : '';
+  return {
+    text: hint
+      ? `Спасибо за вопрос! По запросу «${hint}» могу подобрать варианты в каталоге — уточните размер или бюджет.`
+      : 'Здравствуйте! Чем могу помочь с выбором товара?',
+    model: 'mock',
+  };
+}
+
 /**
- * @param {{ messages: { role: string, content: string }[], systemPrompt: string }} opts
+ * @param {{ messages: { role: string, content: string }[], systemPrompt: string, loadTest?: boolean }} opts
  * @returns {Promise<{ text: string, model: string }>}
  */
-async function completeChat({ messages, systemPrompt }) {
-  if (process.env.CHAT_MOCK_RESPONSES === 'true') {
-    const delay = Math.min(
-      Math.max(Number(process.env.CHAT_MOCK_DELAY_MS) || 3000, 0),
-      30000
-    );
-    if (delay > 0) await sleep(delay);
-    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-    const hint = lastUser ? String(lastUser.content).slice(0, 120) : '';
-    return {
-      text: hint
-        ? `Спасибо за вопрос! По запросу «${hint}» могу подобрать варианты в каталоге — уточните размер или бюджет.`
-        : 'Здравствуйте! Чем могу помочь с выбором товара?',
-      model: 'mock',
-    };
+async function completeChat({ messages, systemPrompt, loadTest = false }) {
+  if (loadTest) {
+    return completeChatMock(messages, LOAD_TEST_CHAT_DELAY_MS);
   }
 
   const apiKey = process.env.OPENROUTER_API_KEY;
@@ -123,4 +125,4 @@ async function completeChat({ messages, systemPrompt }) {
   throw lastErr;
 }
 
-module.exports = { completeChat };
+module.exports = { completeChat, completeChatMock, LOAD_TEST_CHAT_DELAY_MS };

@@ -13,6 +13,7 @@ const {
   ChatConversation,
 } = require('../models');
 const { completeChat } = require('../services/openRouterChat');
+const { isLoadTestRequest } = require('../utils/loadTest');
 const {
   parseConsultIntent,
   rankAndFilterProducts,
@@ -29,12 +30,10 @@ const consultLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Слишком много запросов к консультанту. Попробуйте через несколько минут.' },
-  // Для k6: лимит по clientSessionId (каждый VU — своя сессия), иначе 20 VU с одного IP = 40 запросов на всех
+  skip: (req) => isLoadTestRequest(req),
   keyGenerator: (req) => {
-    if (process.env.CHAT_RATE_LIMIT_BY_SESSION === 'true') {
-      const sid = req.body?.clientSessionId;
-      if (sid && String(sid).trim()) return `sess:${String(sid).trim().slice(0, 120)}`;
-    }
+    const sid = req.body?.clientSessionId;
+    if (sid && String(sid).trim()) return `sess:${String(sid).trim().slice(0, 120)}`;
     return req.ip;
   },
 });
@@ -644,14 +643,29 @@ router.post(
         .join(' ')
         .slice(0, 1500);
 
-      const { block: catalogBlock, products, intent } = await loadCatalogContext({
-        productId,
-        categoryId,
-        lastUserText,
-        userQueryForLabels,
-      });
+      const loadTest = isLoadTestRequest(req);
 
-      if (process.env.CHAT_LOG_PRODUCTS !== '0') {
+      let catalogBlock;
+      let products;
+      let intent;
+      if (loadTest) {
+        catalogBlock =
+          'Режим нагрузочного теста: каталог в контекст не подгружается. Отвечай кратко как консультант.';
+        products = [];
+        intent = null;
+      } else {
+        const ctx = await loadCatalogContext({
+          productId,
+          categoryId,
+          lastUserText,
+          userQueryForLabels,
+        });
+        catalogBlock = ctx.block;
+        products = ctx.products;
+        intent = ctx.intent;
+      }
+
+      if (process.env.CHAT_LOG_PRODUCTS !== '0' && !loadTest) {
         const list = products.length
           ? products.map((p) => `id=${p.id} "${p.name}"`).join(' | ')
           : '—';
@@ -674,6 +688,7 @@ router.post(
       const { text, model } = await completeChat({
         messages: convo,
         systemPrompt,
+        loadTest,
       });
 
       const responsePayload = {
@@ -682,7 +697,7 @@ router.post(
         products: products.length ? products.map((p) => mapProductCard(p, intent)) : undefined,
       };
 
-      if (clientSessionId) {
+      if (clientSessionId && !loadTest) {
         const history = normalizeMessagesForHistory([
           ...messages,
           { role: 'assistant', content: text },
