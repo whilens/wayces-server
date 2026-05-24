@@ -383,6 +383,7 @@ function filterCombinationsByIntent(combinations, intent) {
 }
 
 function intentSummaryForPrompt(intent) {
+  if (!intent) return '';
   const parts = [];
   if (intent.brands.length) {
     parts.push(
