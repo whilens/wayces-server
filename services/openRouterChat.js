@@ -12,12 +12,17 @@ function sleep(ms) {
  */
 async function completeChat({ messages, systemPrompt }) {
   if (process.env.CHAT_MOCK_RESPONSES === 'true') {
-    const delay = Number(process.env.CHAT_MOCK_DELAY_MS) || 300;
+    const delay = Math.min(
+      Math.max(Number(process.env.CHAT_MOCK_DELAY_MS) || 3000, 0),
+      30000
+    );
     if (delay > 0) await sleep(delay);
     const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-    const hint = lastUser ? String(lastUser.content).slice(0, 80) : '';
+    const hint = lastUser ? String(lastUser.content).slice(0, 120) : '';
     return {
-      text: `Тестовый ответ консультанта (mock).${hint ? ` Запрос: «${hint}»` : ''}`,
+      text: hint
+        ? `Спасибо за вопрос! По запросу «${hint}» могу подобрать варианты в каталоге — уточните размер или бюджет.`
+        : 'Здравствуйте! Чем могу помочь с выбором товара?',
       model: 'mock',
     };
   }
