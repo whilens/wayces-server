@@ -1,8 +1,8 @@
 /** Заголовок k6 и других нагрузочных прогонов — включает упрощённый чат без OpenRouter */
 const LOAD_TEST_HEADER = 'x-load-test';
 
-/** Имитация задержки ответа LLM при нагрузочном тесте (мс) */
-const LOAD_TEST_CHAT_DELAY_MS = 3000;
+/** Имитация задержки ответа LLM при нагрузочном тесте (мс). Для отчёта «~3 с» поставьте 3000. */
+const LOAD_TEST_CHAT_DELAY_MS = 800;
 
 function isLoadTestRequest(req) {
   const h = req.headers[LOAD_TEST_HEADER];
