@@ -104,32 +104,6 @@ const processOptionImages = async (optionImages, optionDataImages) => {
 };
 
 /**
- * Сохраняет изображения опции в ProductImage
- * @param {Array} imagePaths - Массив путей к изображениям
- * @param {number} optionId - ID опции варианта
- * @param {Object} transaction - Sequelize транзакция
- * @returns {Promise<Array>} Массив созданных ProductImage записей
- */
-const saveOptionImages = async (imagePaths, optionId, transaction) => {
-  if (!imagePaths || imagePaths.length === 0) {
-    return [];
-  }
-
-  return await Promise.all(
-    imagePaths.map(async (imagePath, imgIndex) => {
-      return await ProductImage.create(
-        {
-          optionId,
-          imageUrl: imagePath,
-          displayOrder: imgIndex,
-        },
-        { transaction }
-      );
-    })
-  );
-};
-
-/**
  * Разделяет загруженные файлы на изображения товара и опций
  * @param {Array} files - Массив всех загруженных файлов
  * @returns {Object} { productImages, optionImages }
@@ -144,7 +118,6 @@ module.exports = {
   processProductImages,
   saveProductImages,
   processOptionImages,
-  saveOptionImages,
   separateImageFiles,
 };
 

@@ -25,11 +25,6 @@ const OrderCancellation = sequelize.define('OrderCancellation', {
     type: DataTypes.ENUM('pending', 'approved', 'rejected'),
     defaultValue: 'pending',
   },
-  adminComment: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-    field: 'admin_comment',
-  },
 }, {
   tableName: 'order_cancellations',
   timestamps: true,

@@ -379,6 +379,8 @@ router.get('/me', async (req, res) => {
         phone: user.phone,
         firstName: user.firstName,
         lastName: user.lastName,
+        email: user.email || '',
+        avatar: user.avatar || null,
       },
     });
   } catch (error) {

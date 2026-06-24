@@ -46,11 +46,6 @@ const ProductVariantOption = sequelize.define('ProductVariantOption', {
     defaultValue: true,
     field: 'is_available',
   },
-  stockQuantity: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-    field: 'stock_quantity',
-  },
   displayOrder: {
     type: DataTypes.INTEGER,
     defaultValue: 0,

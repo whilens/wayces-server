@@ -17,11 +17,6 @@ const ProductImage = sequelize.define('ProductImage', {
     allowNull: true,
     field: 'combination_id',
   },
-  optionId: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    field: 'option_id',
-  },
   imageUrl: {
     type: DataTypes.STRING(500),
     allowNull: false,

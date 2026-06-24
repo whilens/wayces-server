@@ -39,15 +39,6 @@ const Product = sequelize.define('Product', {
     allowNull: true,
     field: 'default_image',
   },
-  rating: {
-    type: DataTypes.DECIMAL(3, 2),
-    defaultValue: 0,
-  },
-  reviewsCount: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-    field: 'reviews_count',
-  },
   isActive: {
     type: DataTypes.BOOLEAN,
     defaultValue: true,

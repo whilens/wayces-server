@@ -1,71 +1,71 @@
-row_type,product_external_id,name,base_price,category_id,description,is_active,discount_type,discount_value,specifications_json,variant_key,variant_name,variant_type,variant_display_order,variant_is_required,option_key,option_value,color_code,price_modifier,option_is_default,option_is_available,option_stock_quantity,option_display_order,combination_sku,combination_price,combination_stock_quantity,combination_is_active,combination_variants_json
+row_type,product_external_id,name,base_price,category_id,description,is_active,discount_type,discount_value,specifications_json,variant_key,variant_name,variant_type,variant_display_order,variant_is_required,option_key,option_value,color_code,price_modifier,option_is_default,option_is_available,option_display_order,combination_sku,combination_price,combination_stock_quantity,combination_is_active,combination_variants_json
 product,SHOE-001,Nike Air Max 90 Winter,7490,,Зимние кроссовки с утеплением,true,,,"{""season"":""winter"",""material"":""leather"",""gender"":""unisex""}",,,,,,,,,,,,,,,,,,,
-variant,SHOE-001,,,,,,,,,color,Цвет,color,0,true,black,Черный,#111111,0,false,true,0,0,,,,,
-variant,SHOE-001,,,,,,,,,color,Цвет,color,0,true,white,Белый,#F5F5F5,0,false,true,0,1,,,,,
-variant,SHOE-001,,,,,,,,,size,Размер,button,1,true,41,41,,0,false,true,0,0,,,,,
-variant,SHOE-001,,,,,,,,,size,Размер,button,1,true,42,42,,0,false,true,0,1,,,,,
+variant,SHOE-001,,,,,,,,,color,Цвет,color,0,true,black,Черный,#111111,0,false,true,0,,,,,
+variant,SHOE-001,,,,,,,,,color,Цвет,color,0,true,white,Белый,#F5F5F5,0,false,true,1,,,,,
+variant,SHOE-001,,,,,,,,,size,Размер,button,1,true,41,41,,0,false,true,0,,,,,
+variant,SHOE-001,,,,,,,,,size,Размер,button,1,true,42,42,,0,false,true,1,,,,,
 combination,SHOE-001,,,,,,,,,,,,,,,,,,,,,,,SH001-BLK-41,7490,8,true,"{""color"":""black"",""size"":""41""}"
 combination,SHOE-001,,,,,,,,,,,,,,,,,,,,,,,SH001-WHT-42,7490,6,true,"{""color"":""white"",""size"":""42""}"
 product,SHOE-002,Adidas Forum Mid Street,6990,,Городские кеды средней высоты,true,,,"{""season"":""all-season"",""material"":""eco-leather"",""gender"":""male""}",,,,,,,,,,,,,,,,,,,
-variant,SHOE-002,,,,,,,,,color,Цвет,color,0,true,beige,Бежевый,#D9C7A1,0,false,true,0,0,,,,,
-variant,SHOE-002,,,,,,,,,color,Цвет,color,0,true,gray,Серый,#9CA3AF,0,false,true,0,1,,,,,
-variant,SHOE-002,,,,,,,,,size,Размер,button,1,true,42,42,,0,false,true,0,0,,,,,
-variant,SHOE-002,,,,,,,,,size,Размер,button,1,true,43,43,,0,false,true,0,1,,,,,
+variant,SHOE-002,,,,,,,,,color,Цвет,color,0,true,beige,Бежевый,#D9C7A1,0,false,true,0,,,,,
+variant,SHOE-002,,,,,,,,,color,Цвет,color,0,true,gray,Серый,#9CA3AF,0,false,true,1,,,,,
+variant,SHOE-002,,,,,,,,,size,Размер,button,1,true,42,42,,0,false,true,0,,,,,
+variant,SHOE-002,,,,,,,,,size,Размер,button,1,true,43,43,,0,false,true,1,,,,,
 combination,SHOE-002,,,,,,,,,,,,,,,,,,,,,,,SH002-BEI-42,6990,10,true,"{""color"":""beige"",""size"":""42""}"
 combination,SHOE-002,,,,,,,,,,,,,,,,,,,,,,,SH002-GRY-43,6990,7,true,"{""color"":""gray"",""size"":""43""}"
 product,SHOE-003,New Balance 574 Classic,8290,,Повседневные кроссовки в ретро стиле,true,,,"{""season"":""all-season"",""material"":""suede-textile"",""gender"":""unisex""}",,,,,,,,,,,,,,,,,,,
-variant,SHOE-003,,,,,,,,,color,Цвет,color,0,true,navy,Синий,#1E3A8A,0,false,true,0,0,,,,,
-variant,SHOE-003,,,,,,,,,color,Цвет,color,0,true,olive,Оливковый,#556B2F,0,false,true,0,1,,,,,
-variant,SHOE-003,,,,,,,,,size,Размер,button,1,true,40,40,,0,false,true,0,0,,,,,
-variant,SHOE-003,,,,,,,,,size,Размер,button,1,true,41,41,,0,false,true,0,1,,,,,
+variant,SHOE-003,,,,,,,,,color,Цвет,color,0,true,navy,Синий,#1E3A8A,0,false,true,0,,,,,
+variant,SHOE-003,,,,,,,,,color,Цвет,color,0,true,olive,Оливковый,#556B2F,0,false,true,1,,,,,
+variant,SHOE-003,,,,,,,,,size,Размер,button,1,true,40,40,,0,false,true,0,,,,,
+variant,SHOE-003,,,,,,,,,size,Размер,button,1,true,41,41,,0,false,true,1,,,,,
 combination,SHOE-003,,,,,,,,,,,,,,,,,,,,,,,SH003-NAV-40,8290,5,true,"{""color"":""navy"",""size"":""40""}"
 combination,SHOE-003,,,,,,,,,,,,,,,,,,,,,,,SH003-OLV-41,8290,9,true,"{""color"":""olive"",""size"":""41""}"
 product,SHOE-004,Puma RS-X Urban,7790,,Массивные кроссовки для города,true,,,"{""season"":""all-season"",""material"":""mesh-synthetic"",""gender"":""male""}",,,,,,,,,,,,,,,,,,,
-variant,SHOE-004,,,,,,,,,color,Цвет,color,0,true,black,Черный,#111111,0,false,true,0,0,,,,,
-variant,SHOE-004,,,,,,,,,color,Цвет,color,0,true,red,Красный,#B91C1C,0,false,true,0,1,,,,,
-variant,SHOE-004,,,,,,,,,size,Размер,button,1,true,42,42,,0,false,true,0,0,,,,,
-variant,SHOE-004,,,,,,,,,size,Размер,button,1,true,44,44,,0,false,true,0,1,,,,,
+variant,SHOE-004,,,,,,,,,color,Цвет,color,0,true,black,Черный,#111111,0,false,true,0,,,,,
+variant,SHOE-004,,,,,,,,,color,Цвет,color,0,true,red,Красный,#B91C1C,0,false,true,1,,,,,
+variant,SHOE-004,,,,,,,,,size,Размер,button,1,true,42,42,,0,false,true,0,,,,,
+variant,SHOE-004,,,,,,,,,size,Размер,button,1,true,44,44,,0,false,true,1,,,,,
 combination,SHOE-004,,,,,,,,,,,,,,,,,,,,,,,SH004-BLK-42,7790,12,true,"{""color"":""black"",""size"":""42""}"
 combination,SHOE-004,,,,,,,,,,,,,,,,,,,,,,,SH004-RED-44,7790,4,true,"{""color"":""red"",""size"":""44""}"
 product,SHOE-005,Reebok Club C 85 Leather,6890,,Классические кожаные кеды,true,,,"{""season"":""all-season"",""material"":""leather"",""gender"":""female""}",,,,,,,,,,,,,,,,,,,
-variant,SHOE-005,,,,,,,,,color,Цвет,color,0,true,white,Белый,#F8FAFC,0,false,true,0,0,,,,,
-variant,SHOE-005,,,,,,,,,color,Цвет,color,0,true,green,Зеленый,#166534,0,false,true,0,1,,,,,
-variant,SHOE-005,,,,,,,,,size,Размер,button,1,true,37,37,,0,false,true,0,0,,,,,
-variant,SHOE-005,,,,,,,,,size,Размер,button,1,true,38,38,,0,false,true,0,1,,,,,
+variant,SHOE-005,,,,,,,,,color,Цвет,color,0,true,white,Белый,#F8FAFC,0,false,true,0,,,,,
+variant,SHOE-005,,,,,,,,,color,Цвет,color,0,true,green,Зеленый,#166534,0,false,true,1,,,,,
+variant,SHOE-005,,,,,,,,,size,Размер,button,1,true,37,37,,0,false,true,0,,,,,
+variant,SHOE-005,,,,,,,,,size,Размер,button,1,true,38,38,,0,false,true,1,,,,,
 combination,SHOE-005,,,,,,,,,,,,,,,,,,,,,,,SH005-WHT-37,6890,11,true,"{""color"":""white"",""size"":""37""}"
 combination,SHOE-005,,,,,,,,,,,,,,,,,,,,,,,SH005-GRN-38,6890,6,true,"{""color"":""green"",""size"":""38""}"
 product,SHOE-006,Converse Chuck 70 High,5990,,Высокие кеды в винтажном стиле,true,,,"{""season"":""all-season"",""material"":""canvas"",""gender"":""unisex""}",,,,,,,,,,,,,,,,,,,
-variant,SHOE-006,,,,,,,,,color,Цвет,color,0,true,black,Черный,#000000,0,false,true,0,0,,,,,
-variant,SHOE-006,,,,,,,,,color,Цвет,color,0,true,cream,Кремовый,#EEE5D3,0,false,true,0,1,,,,,
-variant,SHOE-006,,,,,,,,,size,Размер,button,1,true,40,40,,0,false,true,0,0,,,,,
-variant,SHOE-006,,,,,,,,,size,Размер,button,1,true,42,42,,0,false,true,0,1,,,,,
+variant,SHOE-006,,,,,,,,,color,Цвет,color,0,true,black,Черный,#000000,0,false,true,0,,,,,
+variant,SHOE-006,,,,,,,,,color,Цвет,color,0,true,cream,Кремовый,#EEE5D3,0,false,true,1,,,,,
+variant,SHOE-006,,,,,,,,,size,Размер,button,1,true,40,40,,0,false,true,0,,,,,
+variant,SHOE-006,,,,,,,,,size,Размер,button,1,true,42,42,,0,false,true,1,,,,,
 combination,SHOE-006,,,,,,,,,,,,,,,,,,,,,,,SH006-BLK-40,5990,14,true,"{""color"":""black"",""size"":""40""}"
 combination,SHOE-006,,,,,,,,,,,,,,,,,,,,,,,SH006-CRM-42,5990,8,true,"{""color"":""cream"",""size"":""42""}"
 product,SHOE-007,Vans Old Skool Pro,5590,,Скейтерские кеды с усиленной подошвой,true,,,"{""season"":""all-season"",""material"":""suede-canvas"",""gender"":""unisex""}",,,,,,,,,,,,,,,,,,,
-variant,SHOE-007,,,,,,,,,color,Цвет,color,0,true,black,Черный,#111111,0,false,true,0,0,,,,,
-variant,SHOE-007,,,,,,,,,color,Цвет,color,0,true,brown,Коричневый,#7C4A2D,0,false,true,0,1,,,,,
-variant,SHOE-007,,,,,,,,,size,Размер,button,1,true,41,41,,0,false,true,0,0,,,,,
-variant,SHOE-007,,,,,,,,,size,Размер,button,1,true,43,43,,0,false,true,0,1,,,,,
+variant,SHOE-007,,,,,,,,,color,Цвет,color,0,true,black,Черный,#111111,0,false,true,0,,,,,
+variant,SHOE-007,,,,,,,,,color,Цвет,color,0,true,brown,Коричневый,#7C4A2D,0,false,true,1,,,,,
+variant,SHOE-007,,,,,,,,,size,Размер,button,1,true,41,41,,0,false,true,0,,,,,
+variant,SHOE-007,,,,,,,,,size,Размер,button,1,true,43,43,,0,false,true,1,,,,,
 combination,SHOE-007,,,,,,,,,,,,,,,,,,,,,,,SH007-BLK-41,5590,9,true,"{""color"":""black"",""size"":""41""}"
 combination,SHOE-007,,,,,,,,,,,,,,,,,,,,,,,SH007-BRN-43,5590,7,true,"{""color"":""brown"",""size"":""43""}"
 product,SHOE-008,Asics Gel-Lyte Runner,7390,,Легкие беговые кроссовки,true,,,"{""season"":""summer"",""material"":""mesh"",""gender"":""male""}",,,,,,,,,,,,,,,,,,,
-variant,SHOE-008,,,,,,,,,color,Цвет,color,0,true,blue,Голубой,#3B82F6,0,false,true,0,0,,,,,
-variant,SHOE-008,,,,,,,,,color,Цвет,color,0,true,lime,Лайм,#84CC16,0,false,true,0,1,,,,,
-variant,SHOE-008,,,,,,,,,size,Размер,button,1,true,42,42,,0,false,true,0,0,,,,,
-variant,SHOE-008,,,,,,,,,size,Размер,button,1,true,43,43,,0,false,true,0,1,,,,,
+variant,SHOE-008,,,,,,,,,color,Цвет,color,0,true,blue,Голубой,#3B82F6,0,false,true,0,,,,,
+variant,SHOE-008,,,,,,,,,color,Цвет,color,0,true,lime,Лайм,#84CC16,0,false,true,1,,,,,
+variant,SHOE-008,,,,,,,,,size,Размер,button,1,true,42,42,,0,false,true,0,,,,,
+variant,SHOE-008,,,,,,,,,size,Размер,button,1,true,43,43,,0,false,true,1,,,,,
 combination,SHOE-008,,,,,,,,,,,,,,,,,,,,,,,SH008-BLU-42,7390,13,true,"{""color"":""blue"",""size"":""42""}"
 combination,SHOE-008,,,,,,,,,,,,,,,,,,,,,,,SH008-LIM-43,7390,5,true,"{""color"":""lime"",""size"":""43""}"
 product,SHOE-009,Skechers Arch Fit Daily,6490,,Комфортные кроссовки для ходьбы,true,,,"{""season"":""all-season"",""material"":""textile"",""gender"":""female""}",,,,,,,,,,,,,,,,,,,
-variant,SHOE-009,,,,,,,,,color,Цвет,color,0,true,pink,Розовый,#EC4899,0,false,true,0,0,,,,,
-variant,SHOE-009,,,,,,,,,color,Цвет,color,0,true,gray,Серый,#9CA3AF,0,false,true,0,1,,,,,
-variant,SHOE-009,,,,,,,,,size,Размер,button,1,true,37,37,,0,false,true,0,0,,,,,
-variant,SHOE-009,,,,,,,,,size,Размер,button,1,true,39,39,,0,false,true,0,1,,,,,
+variant,SHOE-009,,,,,,,,,color,Цвет,color,0,true,pink,Розовый,#EC4899,0,false,true,0,,,,,
+variant,SHOE-009,,,,,,,,,color,Цвет,color,0,true,gray,Серый,#9CA3AF,0,false,true,1,,,,,
+variant,SHOE-009,,,,,,,,,size,Размер,button,1,true,37,37,,0,false,true,0,,,,,
+variant,SHOE-009,,,,,,,,,size,Размер,button,1,true,39,39,,0,false,true,1,,,,,
 combination,SHOE-009,,,,,,,,,,,,,,,,,,,,,,,SH009-PNK-37,6490,10,true,"{""color"":""pink"",""size"":""37""}"
 combination,SHOE-009,,,,,,,,,,,,,,,,,,,,,,,SH009-GRY-39,6490,9,true,"{""color"":""gray"",""size"":""39""}"
 product,SHOE-010,Timberland Trail Boot,9990,,Треккинговые ботинки для межсезонья,true,,,"{""season"":""demi"",""material"":""nubuck"",""gender"":""male""}",,,,,,,,,,,,,,,,,,,
-variant,SHOE-010,,,,,,,,,color,Цвет,color,0,true,tan,Песочный,#C68642,0,false,true,0,0,,,,,
-variant,SHOE-010,,,,,,,,,color,Цвет,color,0,true,brown,Коричневый,#7C4A2D,0,false,true,0,1,,,,,
-variant,SHOE-010,,,,,,,,,size,Размер,button,1,true,42,42,,0,false,true,0,0,,,,,
-variant,SHOE-010,,,,,,,,,size,Размер,button,1,true,43,43,,0,false,true,0,1,,,,,
+variant,SHOE-010,,,,,,,,,color,Цвет,color,0,true,tan,Песочный,#C68642,0,false,true,0,,,,,
+variant,SHOE-010,,,,,,,,,color,Цвет,color,0,true,brown,Коричневый,#7C4A2D,0,false,true,1,,,,,
+variant,SHOE-010,,,,,,,,,size,Размер,button,1,true,42,42,,0,false,true,0,,,,,
+variant,SHOE-010,,,,,,,,,size,Размер,button,1,true,43,43,,0,false,true,1,,,,,
 combination,SHOE-010,,,,,,,,,,,,,,,,,,,,,,,SH010-TAN-42,9990,4,true,"{""color"":""tan"",""size"":""42""}"
 combination,SHOE-010,,,,,,,,,,,,,,,,,,,,,,,SH010-BRN-43,9990,3,true,"{""color"":""brown"",""size"":""43""}"

@@ -632,8 +632,6 @@ router.get('/:id', async (req, res) => {
       specifications: product.specifications,
       defaultImage: product.defaultImage,
       images: productImages, // Все изображения товара
-      rating: parseFloat(product.rating || 0),
-      reviews: product.reviewsCount || 0,
       variants: Object.keys(variants).length > 0 ? variants : null,
       combinations: combinations.length > 0 ? combinations : null, // Комплектации товара
       discountType: product.discountType,

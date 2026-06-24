@@ -48,9 +48,6 @@ ProductImage.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
 ProductCombination.hasMany(ProductImage, { foreignKey: 'combination_id' });
 ProductImage.belongsTo(ProductCombination, { foreignKey: 'combination_id' });
 
-ProductVariantOption.hasMany(ProductImage, { foreignKey: 'option_id' });
-ProductImage.belongsTo(ProductVariantOption, { foreignKey: 'option_id' });
-
 // Связи для админов
 Admin.hasMany(RefreshToken, { foreignKey: 'admin_id', as: 'refreshTokens' });
 RefreshToken.belongsTo(Admin, { foreignKey: 'admin_id', as: 'admin' });
@@ -98,6 +95,13 @@ CategoryVariant.belongsTo(Category, { foreignKey: 'category_id', as: 'category' 
 // Связи для push-подписок
 User.hasMany(PushSubscription, { foreignKey: 'user_id', as: 'pushSubscriptions' });
 PushSubscription.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+// Связи для чат-консультанта
+Product.hasMany(ChatConversation, { foreignKey: 'product_id', as: 'chatConversations' });
+ChatConversation.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+
+Category.hasMany(ChatConversation, { foreignKey: 'category_id', as: 'chatConversations' });
+ChatConversation.belongsTo(Category, { foreignKey: 'category_id', as: 'category' });
 
 module.exports = {
   Category,

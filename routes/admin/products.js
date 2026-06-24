@@ -10,7 +10,6 @@ const {
   processProductImages,
   saveProductImages,
   processOptionImages,
-  saveOptionImages,
   separateImageFiles,
 } = require('../../utils/productImageHandler');
 const catalogCache = require('../../services/catalogCache');
@@ -403,7 +402,6 @@ router.post('/import/csv', authenticateAdmin, csvUpload.single('file'), async (r
             images: null,
             isDefault: parseBool(vRow.option_is_default, false),
             isAvailable: parseBool(vRow.option_is_available, true),
-            stockQuantity: parseIntSafe(vRow.option_stock_quantity, 0),
             displayOrder: parseIntSafe(vRow.option_display_order, 0),
           },
           { transaction }
@@ -732,7 +730,7 @@ router.post('/', authenticateAdmin, upload.any(), async (req, res) => {
               optionData.images
             );
             
-            const createdOption = await ProductVariantOption.create(
+            await ProductVariantOption.create(
               {
                 variantId: variant.id,
                 optionKey: optionData.key,
@@ -742,16 +740,10 @@ router.post('/', authenticateAdmin, upload.any(), async (req, res) => {
                 images: processedOptionImages,
                 isDefault: optionData.isDefault || false,
                 isAvailable: optionData.isAvailable !== false,
-                stockQuantity: parseInt(optionData.stockQuantity || 0),
                 displayOrder: optionData.displayOrder || 0,
               },
               { transaction }
             );
-            
-            // Сохраняем изображения опции в ProductImage
-            if (processedOptionImages) {
-              await saveOptionImages(processedOptionImages, createdOption.id, transaction);
-            }
           }
         }
       }
@@ -1236,7 +1228,6 @@ router.put('/:id(\\d+)', authenticateAdmin, upload.any(), async (req, res) => {
                   images: optionData.images ? (Array.isArray(optionData.images) ? optionData.images : [optionData.images]) : null,
                   isDefault: optionData.isDefault || false,
                   isAvailable: optionData.isAvailable !== false,
-                  stockQuantity: parseInt(optionData.stockQuantity || 0),
                   displayOrder: optionData.displayOrder || 0,
                 },
                 { transaction }
